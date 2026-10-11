@@ -1,98 +1,92 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WebServer.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
 
 // =============================================================================
-// DATOS DE TU RED WI-FI (2.4 GHz)
+// CONFIGURACIÓN DE RED WI-FI (2.4 GHz)
 // =============================================================================
 const char* ssid = "Horaim_Wiltel";
 const char* password = "lonapaju4";
 
-// Servidor web en el puerto estándar 80
-WebServer servidor(80);
+// =============================================================================
+// CONFIGURACIÓN DE SUPABASE
+// =============================================================================
+const char* SUPABASE_URL = "https://pqydjwpjclfnwfrzpsvb.supabase.co/rest/v1/mediciones";
+const char* SUPABASE_KEY = "sb_publishable_jGjzJtPJeXKfqIwatNmRIA_oqSGTYRZ";
 
-// Pin del LED azul integrado
-const int LED_AZUL = 2;
-bool estadoLed = false; // Estado actual del LED (falso = apagado, verdadero = encendido)
+// Intervalo de transmisión (10 segundos = 10000 ms)
+const unsigned long INTERVALO_ENVIO_MS = 10000;
 
-// Destello rápido en el LED para indicar que se recargó la página,
-// respetando el estado en el que ya estaba el LED
-void destelloRecarga() {
-    // Si estaba apagado, destella encendiéndose un instante
-    // Si estaba prendido, hace un guiño apagándose un instante
-    digitalWrite(LED_AZUL, estadoLed ? LOW : HIGH);
-    delay(100);
-    digitalWrite(LED_AZUL, estadoLed ? HIGH : LOW);
+// =============================================================================
+// HARDWARE Y VARIABLES GLOBALES
+// =============================================================================
+const int LED_AZUL = 2; // Pin del LED azul integrado en el ESP32
+
+unsigned long ultimaTransmision = 0;
+int contadorEnvios = 0;
+
+// Destello en el LED al enviar datos con éxito
+void destelloEnvio() {
+    digitalWrite(LED_AZUL, HIGH);
+    delay(70);
+    digitalWrite(LED_AZUL, LOW);
+    delay(70);
+    digitalWrite(LED_AZUL, HIGH);
+    delay(70);
+    digitalWrite(LED_AZUL, LOW);
 }
 
-// Función que genera y responde la página web principal
-void manejarPaginaPrincipal() {
-    String ipCliente = servidor.client().remoteIP().toString();
-    Serial.println(">>> [PAGINA RECARGADA] Visita desde IP: " + ipCliente);
-
-    // Destello de actividad al recargar
-    destelloRecarga();
-
-    float tempC = temperatureRead();
-
-    String html = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'>";
-    html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
-    html += "<title>ESP32 - Panel de Control</title>";
-    html += "<style>";
-    html += "body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #f8fafc; text-align: center; padding: 25px; }";
-    html += ".card { background: #1e293b; border-radius: 18px; padding: 25px; max-width: 400px; margin: 0 auto; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid #334155; }";
-    html += "h1 { color: #38bdf8; margin-bottom: 5px; font-size: 24px; }";
-    html += ".temp-box { background: #334155; border-radius: 12px; padding: 15px; margin: 20px 0; }";
-    html += ".temp-val { font-size: 36px; font-weight: bold; color: #4ade80; }";
-    html += ".estado-box { font-size: 18px; margin-bottom: 15px; }";
-    html += ".btn { display: inline-block; padding: 16px 32px; border-radius: 12px; text-decoration: none; font-weight: bold; font-size: 18px; transition: 0.2s; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }";
-    html += ".btn-on { background: #2563eb; color: white; }";
-    html += ".btn-off { background: #dc2626; color: white; }";
-    html += ".btn:hover { opacity: 0.9; }";
-    html += ".info { margin-top: 25px; font-size: 13px; color: #94a3b8; }";
-    html += "</style></head><body>";
-
-    html += "<div class='card'>";
-    html += "<h1>ESP32 Cogollera</h1>";
-    html += "<p style='color: #94a3b8; font-size: 14px;'>Red: " + String(ssid) + "</p>";
-
-    html += "<div class='temp-box'>";
-    html += "<div style='color: #cbd5e1; font-size: 14px;'>Temperatura del Chip</div>";
-    html += "<div class='temp-val'>" + String(tempC, 1) + " °C</div>";
-    html += "</div>";
-
-    html += "<div class='estado-box'>";
-    html += "Estado del LED: <b style='color: " + String(estadoLed ? "#60a5fa" : "#94a3b8") + ";'>" + String(estadoLed ? "ENCENDIDO" : "APAGADO") + "</b>";
-    html += "</div>";
-
-    // Botón de encender o apagar el LED
-    if (estadoLed) {
-        html += "<a class='btn btn-off' href='/led/toggle'>APAGAR LED</a>";
-    } else {
-        html += "<a class='btn btn-on' href='/led/toggle'>ENCENDER LED</a>";
+// =============================================================================
+// ENVÍO DE DATOS A SUPABASE VÍA HTTPS POST
+// =============================================================================
+bool enviarMedicionASupabase(float temp, int cont) {
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[SUPABASE] Wi-Fi desconectado. Cancelando envio.");
+        return false;
     }
 
-    html += "<div class='info'>";
-    html += "<div>IP Local: <b>" + WiFi.localIP().toString() + "</b></div>";
-    html += "<div>Tu IP: " + ipCliente + "</div>";
-    html += "</div>";
+    WiFiClientSecure client;
+    client.setInsecure(); // No verificar certificados SSL en el ESP32
 
-    html += "</div></body></html>";
+    HTTPClient https;
+    if (!https.begin(client, SUPABASE_URL)) {
+        Serial.println("[SUPABASE] Error: No se pudo iniciar el cliente HTTPS.");
+        return false;
+    }
 
-    servidor.send(200, "text/html", html);
+    https.addHeader("Content-Type", "application/json");
+    https.addHeader("apikey", SUPABASE_KEY);
+    https.addHeader("Authorization", String("Bearer ") + SUPABASE_KEY);
+    https.addHeader("Prefer", "return=minimal");
+
+    // Construcción del JSON: {"temperatura": 37.25, "contador": 1}
+    String payload = "{\"temperatura\":" + String(temp, 2) + ",\"contador\":" + String(cont) + "}";
+
+    Serial.printf("[SUPABASE] Transmitiendo ciclo #%d (Temp: %.2f °C)... ", cont, temp);
+    int codigoHttp = https.POST(payload);
+
+    bool exito = (codigoHttp >= 200 && codigoHttp < 300);
+    if (exito) {
+        Serial.printf("EXITO (HTTP %d)\n", codigoHttp);
+        destelloEnvio();
+    } else if (codigoHttp > 0) {
+        Serial.printf("RESPUESTA HTTP %d\n", codigoHttp);
+        String cuerpo = https.getString();
+        if (cuerpo.length() > 0) {
+            Serial.println("  Detalle de respuesta: " + cuerpo);
+        }
+    } else {
+        Serial.printf("FALLO DE CONEXION: %s\n", https.errorToString(codigoHttp).c_str());
+    }
+
+    https.end();
+    return exito;
 }
 
-// Función que conmuta el LED cuando tocas el botón de la página
-void alternarLed() {
-    estadoLed = !estadoLed;
-    digitalWrite(LED_AZUL, estadoLed ? HIGH : LOW);
-    Serial.println(estadoLed ? "-> Web: LED ENCENDIDO" : "-> Web: LED APAGADO");
-    
-    // Redirige automáticamente de vuelta a la página principal
-    servidor.sendHeader("Location", "/");
-    servidor.send(303);
-}
-
+// =============================================================================
+// SETUP Y LOOP
+// =============================================================================
 void setup() {
     Serial.begin(115200);
     delay(1000);
@@ -101,11 +95,9 @@ void setup() {
     digitalWrite(LED_AZUL, LOW);
 
     Serial.println("\n==========================================");
-    Serial.println("         CONEXION WI-FI DEL ESP32         ");
+    Serial.println("   COGOLLERA IOT - TELEMETRIA SUPABASE    ");
     Serial.println("==========================================");
-
-    Serial.print("Conectando a la red: ");
-    Serial.println(ssid);
+    Serial.printf("Conectando a Wi-Fi: %s\n", ssid);
 
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
@@ -118,28 +110,36 @@ void setup() {
     }
 
     if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("\n\n------------------------------------------");
-        Serial.println(">>> CONEXION EXITOSA A WI-FI <<<");
-        Serial.print("Direccion IP asignada: http://");
+        Serial.println("\n>>> CONEXION WI-FI EXITOSA <<<");
+        Serial.print("IP Asignada: ");
         Serial.println(WiFi.localIP());
-        Serial.print("Intensidad de senal (RSSI): ");
-        Serial.print(WiFi.RSSI());
-        Serial.println(" dBm");
-        Serial.println("------------------------------------------");
+        Serial.printf("Senal RSSI: %d dBm\n", WiFi.RSSI());
+        Serial.printf("Transmision configurada cada %lu segundos hacia Supabase.\n\n", INTERVALO_ENVIO_MS / 1000);
 
-        // Rutas del servidor web
-        servidor.on("/", manejarPaginaPrincipal);
-        servidor.on("/led/toggle", alternarLed);
-        servidor.on("/favicon.ico", []() { servidor.send(204); }); // Evita error en consola por el icono
-        servidor.begin();
-        Serial.println("Servidor Web HTTP iniciado en el puerto 80.\n");
+        // Envío inicial al encender
+        contadorEnvios++;
+        float temp = temperatureRead();
+        enviarMedicionASupabase(temp, contadorEnvios);
+        ultimaTransmision = millis();
     } else {
-        Serial.println("\n\n[ERROR] No se pudo conectar a la red Wi-Fi.");
+        Serial.println("\n[ERROR] No se pudo conectar a la red Wi-Fi. Revisa credenciales.");
     }
 }
 
 void loop() {
-    if (WiFi.status() == WL_CONNECTED) {
-        servidor.handleClient();
+    unsigned long ahora = millis();
+
+    // Envío periódico cada INTERVALO_ENVIO_MS
+    if (ahora - ultimaTransmision >= INTERVALO_ENVIO_MS) {
+        ultimaTransmision = ahora;
+
+        if (WiFi.status() == WL_CONNECTED) {
+            contadorEnvios++;
+            float temp = temperatureRead();
+            enviarMedicionASupabase(temp, contadorEnvios);
+        } else {
+            Serial.println("[WIFI] Conexion perdida. Reintentando reconectar...");
+            WiFi.reconnect();
+        }
     }
 }
