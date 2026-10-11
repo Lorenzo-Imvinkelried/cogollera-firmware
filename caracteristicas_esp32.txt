@@ -1,0 +1,160 @@
+================================================================================
+                    GUIA DE HARDWARE Y RECURSOS DEL ESP32
+================================================================================
+
+El ESP32 es un microcontrolador de alto rendimiento diseñado por Espressif Systems.
+No es solo un procesador para encender luces, sino prácticamente una microcomputadora
+con conectividad inalámbrica y múltiples sensores y periféricos internos.
+
+A continuación tienes el detalle de todo lo que incluye el chip y las funciones/comandos
+en C++ (Arduino/PlatformIO) para usarlos.
+
+--------------------------------------------------------------------------------
+1. PROCESADOR Y NUCLEOS (CPU)
+--------------------------------------------------------------------------------
+- Modelo: Xtensa Dual-Core 32-bit LX6.
+- Velocidad de reloj: Hasta 240 MHz (comparado con 16 MHz de un Arduino común).
+- 2 núcleos independientes: 
+  * Core 0: Suele encargarse de las tareas de radio (Wi-Fi / Bluetooth).
+  * Core 1: Ejecuta tu código de Arduino (setup y loop).
+  * Puedes crear tareas paralelas usando FreeRTOS (`xTaskCreatePinnedToCore`).
+
+Funciones útiles en código:
+  ESP.getCpuFreqMHz();       // Devuelve la velocidad actual (ej. 240)
+  xPortGetCoreID();          // Devuelve 0 o 1 (en qué núcleo está corriendo el código actual)
+  ESP.restart();             // Reinicia el ESP32 por software
+
+--------------------------------------------------------------------------------
+2. MEMORIA INTERNA
+--------------------------------------------------------------------------------
+- SRAM interna: 520 KB (para variables y memoria RAM de ejecución).
+- Memoria Flash externa: 4 MB (donde se guarda tu código firmware.bin).
+- Memoria ROM: 448 KB (con las rutinas de arranque del fabricante).
+- Almacenamiento no volátil:
+  * Sistema de archivos SPIFFS / LittleFS: Guarda archivos HTML, fotos o datos en la Flash.
+  * Preferences / NVS: Guarda configuraciones clave-valor que no se borran al apagar.
+
+Funciones útiles en código:
+  ESP.getFreeHeap();         // Memoria RAM libre en bytes
+  ESP.getFlashChipSize();    // Tamaño de la memoria flash en bytes (4194304 = 4MB)
+
+--------------------------------------------------------------------------------
+3. WI-FI INTEGRADO (2.4 GHz 802.11 b/g/n)
+--------------------------------------------------------------------------------
+Permite conectar el ESP32 a Internet o crear su propia red inalámbrica.
+- Modo Estación (STA): Se conecta al router de tu casa.
+- Modo Punto de Acceso (AP): Crea una red Wi-Fi propia (ej. "Mi-ESP32") para que te conectes con el celular.
+- Protocolos soportados: HTTP (servidor web), WebSockets, MQTT, HTTPS, DNS, NTP (hora mundial).
+
+Librería: #include <WiFi.h>
+Comandos principales:
+  WiFi.begin("TuRedWiFi", "TuContrasena");   // Conectar a tu router
+  WiFi.status() == WL_CONNECTED              // Comprobar si se conectó
+  WiFi.localIP();                            // Dirección IP asignada en tu red
+  WiFi.softAP("ESP32-Red", "12345678");      // Crear red Wi-Fi propia
+
+--------------------------------------------------------------------------------
+4. BLUETOOTH INTEGRADO (v4.2 BR/EDR y BLE)
+--------------------------------------------------------------------------------
+Tiene soporte para dos tipos de Bluetooth:
+- Bluetooth Clásico (Serial Bluetooth): Funciona exactamente como un cable serie pero sin cables.
+  Puedes mandar texto entre tu celular (con una app como Serial Bluetooth Terminal) y el ESP32.
+- BLE (Bluetooth Low Energy): Ideal para transmitir pequeños datos con consumo casi nulo
+  (balizas beacon, sensores de ritmo cardíaco, mandos a distancia).
+
+Librería: #include "BluetoothSerial.h"
+Comandos principales:
+  BluetoothSerial SerialBT;
+  SerialBT.begin("ESP32_Cogollera");   // Nombre visible al buscar desde el celular
+  SerialBT.println("Hola Celular");    // Enviar datos por Bluetooth
+  SerialBT.read();                     // Leer datos recibidos desde el celular
+
+--------------------------------------------------------------------------------
+5. SENSORES TACTILES CAPACITIVOS (TOUCH PINS - 10 SENSORES)
+--------------------------------------------------------------------------------
+El ESP32 tiene 10 pines con detección táctil capacitiva interna.
+No necesitas pulsadores mecánicos: conectas un cable o una placa metálica/papel aluminio
+al pin y el chip detecta cuando tu dedo lo toca.
+
+Pines táctiles: T0 (GPIO4), T1 (GPIO0), T2 (GPIO2), T3 (GPIO15), T4 (GPIO13),
+                T5 (GPIO12), T6 (GPIO14), T7 (GPIO27), T8 (GPIO33), T9 (GPIO32).
+
+Comando en código:
+  int valor = touchRead(4);   // Lee el pin T0. Sin tocar suele dar ~70-90, al tocar baja a ~10-20.
+
+--------------------------------------------------------------------------------
+6. SENSOR DE EFECTO HALL (DETECCION DE CAMPOS MAGNETICOS)
+--------------------------------------------------------------------------------
+Dentro del encapsulado metálico del chip hay un sensor magnético.
+Permite detectar si le acercas un imán a la superficie de la placa.
+
+Comando en código:
+  int campoMagnetico = hallRead();  // Valores positivos o negativos según el polo del imán.
+
+--------------------------------------------------------------------------------
+7. SENSOR DE TEMPERATURA INTERNO DEL SILICIO
+--------------------------------------------------------------------------------
+Mide la temperatura interna del procesador (en grados Celsius).
+Sirve para saber si el procesador está sobrecalentándose.
+
+Comando en código:
+  float temp = temperatureRead();   // Devuelve temperatura en °C (ej: 45.2)
+
+--------------------------------------------------------------------------------
+8. LECTURAS ANALOGICAS (ADC - 12 BITS)
+--------------------------------------------------------------------------------
+Permite leer voltajes de 0 a 3.3V con una precisión de 0 a 4095 (12 bits).
+Ideal para leer sensores como: potenciómetros, sensores de humedad de tierra,
+sensores de luz LDR, etc.
+
+Canales: 18 canales distribuidos en ADC1 (GPIOs 32 a 39) y ADC2 (GPIOs 0, 2, 4, 12-15, 25-27).
+*Consejo*: Usa los pines de ADC1 si vas a usar Wi-Fi al mismo tiempo.
+
+Comando en código:
+  int lectura = analogRead(34);     // Lee el voltaje del pin 34 (valor entre 0 y 4095)
+
+--------------------------------------------------------------------------------
+9. SALIDAS ANALOGICAS REALES (DAC - 8 BITS)
+--------------------------------------------------------------------------------
+A diferencia de Arduino (que simula voltajes con PWM), el ESP32 tiene 2 pines
+con Conversores Digital a Analógico (DAC) reales:
+- GPIO 25 (Canal 1)
+- GPIO 26 (Canal 2)
+Permite generar voltajes continuos reales de 0V a 3.3V y generar señales de audio o música.
+
+Comando en código:
+  dacWrite(25, 128);   // Entrega 1.65V continuos en el pin 25 (rango 0 a 255)
+
+--------------------------------------------------------------------------------
+10. MODULACION POR ANCHO DE PULSOS (PWM / LEDC - 16 CANALES)
+--------------------------------------------------------------------------------
+Control de brillo de luces, velocidad de motores o servomotores en cualquier pin GPIO.
+Tiene 16 canales independientes con resolución configurable (de 1 a 16 bits).
+
+Comandos en código:
+  ledcAttachPin(pin, canal);           // Asignar pin a un canal
+  ledcSetup(canal, frecuencia, bits);  // Configurar ej. 5000Hz, 8 bits
+  ledcWrite(canal, valor);             // Regular potencia (0 a 255)
+
+--------------------------------------------------------------------------------
+11. PUERTOS DE COMUNICACION DIGITAL
+--------------------------------------------------------------------------------
+- 3 Puertos UART (Serie): Serial (USB), Serial1 y Serial2 (para GPS, módems, sensores seriales).
+- 2 Buses I2C: Con solo 2 cables (SDA en GPIO 21, SCL en GPIO 22) puedes conectar
+  decenas de módulos: pantallas OLED, sensores BME280/DHT20, relojes RTC.
+- 3 Buses SPI: Para pantallas a color TFT y tarjetas MicroSD.
+
+--------------------------------------------------------------------------------
+12. MODOS DE BAJO CONSUMO (DEEP SLEEP)
+--------------------------------------------------------------------------------
+Para proyectos a batería: el ESP32 puede "dormirse profundamente" apagando casi todo
+el chip, consumiendo apenas microamperios (10 a 15 uA), y despertarse por:
+- Un temporizador (ej. cada 10 minutos para leer un sensor y volver a dormir).
+- Al tocar un pin táctil (Touch pin).
+- Al apretar un botón externo.
+
+Comandos en código:
+  esp_sleep_enable_timer_wakeup(10 * 1000000); // Despertar en 10 segundos
+  esp_deep_sleep_start();                      // Entrar en modo dormir profundo
+
+================================================================================

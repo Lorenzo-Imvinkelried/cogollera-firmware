@@ -1,2 +1,3 @@
-pio run --target upload
+pio device list
+pio run --target upload -> cuando sale Conecting.... apretar el BOOT/IOO y soltar, eso permite sobreescribir el codigo actual sino tira error
 pio device monitor
