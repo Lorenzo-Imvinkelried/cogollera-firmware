@@ -78,3 +78,22 @@ Los paquetes se descargan y almacenan a nivel de usuario en tu disco local en:
   ```powershell
   pio device monitor
   ```
+
+---
+
+## 5. Ejemplos Modulares (`ejemplos/`)
+
+El proyecto cuenta con ejemplos de prueba independientes y listos para usar:
+1. `01-led-interno-onoff.cpp`: Encendido y apagado básico del LED integrado (GPIO 2).
+2. `02-temperatura-interna.cpp`: Lectura de la temperatura interna del chip con `temperatureRead()`.
+3. `03-conexion-wifi-servidor-web.cpp`: Conexión Wi-Fi y servidor web local HTTP para control.
+4. `04-envio-supabase-telemetria.cpp`: Conexión Wi-Fi y subida periódica de telemetría a Supabase por HTTPS.
+5. `05-ble-control-nrfconnect.cpp`: Integración completa de telemetría hacia Supabase (Wi-Fi + HTTPS) con control local en tiempo real por Bluetooth Low Energy usando la app **nRF Connect**.
+
+### 💡 Optimización de Memoria RAM con NimBLE
+El ESP32 utiliza por defecto la librería Bluetooth clásica de Espressif (*Bluedroid*), la cual consume **más de 100 KB de memoria RAM**. Al combinar Bluetooth con peticiones seguras HTTPS a la nube (Supabase), la memoria se agotaba y provocaba el error `(-16) BIGNUM - Memory allocation failed`.
+
+Para solucionarlo, en `05-ble-control-nrfconnect.cpp` y en el firmware principal se implementó **`NimBLE-Arduino`** (`#include <NimBLEDevice.h>`), una arquitectura Bluetooth ultraligera:
+- **Consumo de RAM:** Apenas ~20 KB (ahorra más de 85 KB de RAM).
+- **Compatibilidad:** Permite que el cifrado TLS/HTTPS conviva con conexiones activas de Bluetooth sin saturar el microcontrolador.
+- **Partición:** Se configuró `board_build.partitions = huge_app.csv` en `platformio.ini` para disponer de 3.1 MB de almacenamiento Flash.
