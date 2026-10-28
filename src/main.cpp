@@ -2,147 +2,151 @@
 
 /*
  * ==============================================================================
- * EJEMPLO 07: Detector de Barrera IR de Alta Velocidad con LED Testigo Externo
+ * EJEMPLO 08: Doble Barrera IR - Detector de Bicho Grande / Cogollera
  * ==============================================================================
  * Placa: ESP32-S V1.1 (38 pines) - Vista Dorsal / Panza Abajo
  * 
- * Distribución de conexiones según 'circuito_detector_infrarrojo.txt':
- * 1. Emisor IR (LED transparente):
- *    - Ánodo (+) a Resistencia 120Ω (o 220Ω) conectada a 3V3 (Carril rojo +).
- *    - Cátodo (-) a GND (Carril azul -).
+ * Lógica de clasificación de tamaño:
+ * - Haz 1 (GPIO 34) y Haz 2 (GPIO 35) están separados por 8-12 mm.
+ * - Si cae un bicho pequeño o polvo (< 5mm): Corta solo 1 haz -> Se DESCARTA.
+ * - Si cae una COGOLLERA (15-30mm): Corta AMBOS haces simultáneamente -> +1 CONTADOR.
  * 
- * 2. Receptor IR (Fototransistor lente negra):
- *    - Colector a Resistencia 47kΩ a 3V3, y señal conectada a GPIO 34 (Pin 15 Der).
- *    - Emisor a GND (Carril azul -).
- * 
- * 3. LED Testigo Externo (Aviso de detección):
- *    - Conectado a GPIO 26 / P26 (Pin 10 Der) con Resistencia de 220Ω a Ánodo (+).
- *    - Cátodo (-) a GND (Carril azul -).
- * 
- * Características del firmware:
- * - Auto-calibración en el arranque: Mide el nivel de reposo y calcula el umbral óptimo.
- * - Test inicial de LEDs: Hace parpadear el LED externo y el interno al encender.
- * - Detección ultrarrápida sin delays: Muestreo continuo a miles de lecturas/seg.
- * - Extensor de pulso: Mantiene encendido el LED externo 250 ms por cada corte.
+ * Distribución de pines:
+ * - Receptor IR 1: GPIO 34 (Pin 15 Der)
+ * - Receptor IR 2: GPIO 35 (Pin 14 Der)
+ * - LED Testigo:   GPIO 26 (Pin 10 Der) + LED azul integrado (GPIO 2)
+ * - Alimentación:  3.3V (Pin 19 Der) y GND (Pin 06 Der)
  */
 
 // Asignación de pines
-const int PIN_SENSOR_IR   = 34; // Pin P34 (Entrada analógica ADC1 - Pin 15 Der)
-const int PIN_LED_EXTERNO = 26; // Pin P26 (LED externo en protoboard - Pin 10 Der)
-const int PIN_LED_AZUL    = 2;  // LED azul integrado en la placa
+const int PIN_IR_1        = 34; // Sensor IR 1 (Haz superior)
+const int PIN_IR_2        = 35; // Sensor IR 2 (Haz inferior)
+const int PIN_LED_EXTERNO = 26; // LED de aviso en protoboard
+const int PIN_LED_AZUL    = 2;  // LED integrado en la placa
 
-// Duración del pulso de luz del LED externo al detectar (milisegundos)
-const unsigned long TIEMPO_LED_VISUAL = 250;
+// Duración del aviso visual del LED al confirmar una captura (ms)
+const unsigned long TIEMPO_LED_VISUAL = 350;
 
-// Variables dinámicas de calibración
-int valorReposo = 0;
-int umbralDeteccion = 3400; // Se calcula automáticamente al calibrar
+// Umbrales calculados por auto-calibración individual
+int umbral1 = 3400;
+int umbral2 = 3400;
+int reposo1 = 0;
+int reposo2 = 0;
 
-// Variables de control de estado y tiempo
-bool hazBloqueado = false;
+// Contadores y estados
+unsigned long contadorCogolleras = 0;
+unsigned long contadorDescartes  = 0;
+
+bool cogolleraEnCurso = false;
+bool descarteEnCurso  = false;
+
 unsigned long tiempoApagarLED = 0;
-unsigned long contadorDetecciones = 0;
 unsigned long tiempoUltimoReporte = 0;
 
-void calibrarSensor() {
-    Serial.println("\n[CALIBRANDO] Evaluando luz ambiente con el haz libre...");
-    Serial.println("-> Asegurate de no tapar los sensores durante 1 segundo.");
+void calibrarAmbosSensores() {
+    Serial.println("\n[CALIBRANDO] Evaluando ambos haces en reposo (manten despejada la trampa)...");
 
-    // Parpadeo sincronizado de ambos LEDs (externo e interno) para verificar funcionamiento
-    long suma = 0;
+    long suma1 = 0;
+    long suma2 = 0;
     const int MUESTRAS = 40;
+
     for (int i = 0; i < MUESTRAS; i++) {
-        suma += analogRead(PIN_SENSOR_IR);
-        
-        bool estadoBlink = (i % 4 < 2);
-        digitalWrite(PIN_LED_EXTERNO, estadoBlink ? HIGH : LOW);
-        digitalWrite(PIN_LED_AZUL, estadoBlink ? HIGH : LOW);
-        
+        suma1 += analogRead(PIN_IR_1);
+        suma2 += analogRead(PIN_IR_2);
+
+        // Parpadeo de diagnóstico en ambos LEDs durante la calibración
+        bool blink = (i % 4 < 2);
+        digitalWrite(PIN_LED_EXTERNO, blink ? HIGH : LOW);
+        digitalWrite(PIN_LED_AZUL, blink ? HIGH : LOW);
         delay(25);
     }
+
     digitalWrite(PIN_LED_EXTERNO, LOW);
     digitalWrite(PIN_LED_AZUL, LOW);
 
-    valorReposo = suma / MUESTRAS;
+    reposo1 = suma1 / MUESTRAS;
+    reposo2 = suma2 / MUESTRAS;
 
-    // El umbral se calcula automáticamente en el punto medio exacto
-    // entre el valor de reposo y el tope de corte (4095)
-    int margenDisponible = 4095 - valorReposo;
-    umbralDeteccion = valorReposo + (margenDisponible * 0.50);
+    // Cálculo del punto medio dinámico para cada receptor de forma independiente
+    umbral1 = reposo1 + ((4095 - reposo1) * 0.50);
+    umbral2 = reposo2 + ((4095 - reposo2) * 0.50);
 
-    Serial.printf("-> Nivel medido en reposo (Libre): %d\n", valorReposo);
-    Serial.printf("-> Umbral dinamico asignado:     %d\n", umbralDeteccion);
-
-    if (valorReposo > 3700) {
-        Serial.println("[AVISO] El sensor recibe poca luz. Alinea los LEDs frente a frente.");
-    } else {
-        Serial.println("-> Calibracion EXITOSA: Sistema activo y vigilando.");
-    }
-    Serial.println("--------------------------------------------------");
+    Serial.printf("-> Sensor 1 (GPIO 34): Reposo = %4d | Umbral = %4d\n", reposo1, umbral1);
+    Serial.printf("-> Sensor 2 (GPIO 35): Reposo = %4d | Umbral = %4d\n", reposo2, umbral2);
+    Serial.println("-> Calibracion EXITOSA: Sistema vigilando caidas de cogollera.");
+    Serial.println("----------------------------------------------------------------------");
 }
 
 void setup() {
     Serial.begin(115200);
     delay(500);
 
-    // Configuramos ambos LEDs como salidas digitales
     pinMode(PIN_LED_EXTERNO, OUTPUT);
     pinMode(PIN_LED_AZUL, OUTPUT);
 
-    // Resolución de 12 bits para lectura analógica (0 - 4095)
     analogReadResolution(12);
 
     Serial.println();
-    Serial.println("==================================================");
-    Serial.println("  ESP32: BARRERA IR CON LED TESTIGO EN GPIO 26    ");
-    Serial.println("==================================================");
-    Serial.println("-> Sensor IR:  GPIO 34 (P34)");
-    Serial.println("-> LED Alerta: GPIO 26 (P26) y LED Azul (GPIO 2)");
+    Serial.println("======================================================================");
+    Serial.println("   ESP32: TRAMPA INTELIGENTE COGOLLERA (DOBLE BARRERA INFRARROJA)    ");
+    Serial.println("======================================================================");
 
-    // Calibramos automáticamente al iniciar
-    calibrarSensor();
+    calibrarAmbosSensores();
 }
 
 void loop() {
-    // Lectura de alta velocidad (toma solo unos microsegundos)
-    int valorIR = analogRead(PIN_SENSOR_IR);
+    int v1 = analogRead(PIN_IR_1);
+    int v2 = analogRead(PIN_IR_2);
     unsigned long ahora = millis();
 
-    // Verificamos si el haz fue interrumpido
-    bool corteDetectado = (valorIR >= umbralDeteccion);
+    bool corte1 = (v1 >= umbral1);
+    bool corte2 = (v2 >= umbral2);
 
-    // DISPARO DE DETECCIÓN: Transición de libre a cortado
-    if (corteDetectado && !hazBloqueado) {
-        hazBloqueado = true;
-        contadorDetecciones++;
+    // CASO 1: AMBOS HACES CORTADOS SIMULTÁNEAMENTE -> BICHO GRANDE (COGOLLERA)
+    if (corte1 && corte2) {
+        if (!cogolleraEnCurso) {
+            cogolleraEnCurso = true;
+            contadorCogolleras++;
 
-        // Encendemos tanto el LED testigo externo como el interno
-        digitalWrite(PIN_LED_EXTERNO, HIGH);
-        digitalWrite(PIN_LED_AZUL, HIGH);
+            // Encendemos los LEDs de alarma
+            digitalWrite(PIN_LED_EXTERNO, HIGH);
+            digitalWrite(PIN_LED_AZUL, HIGH);
+            tiempoApagarLED = ahora + TIEMPO_LED_VISUAL;
 
-        // Mantenemos encendido el LED por el tiempo visual mínimo (250ms)
-        tiempoApagarLED = ahora + TIEMPO_LED_VISUAL;
-
-        Serial.printf("[DETECCION #%lu] ¡¡ CORTE DETECTADO !! -> LED ENCENDIDO (IR: %d)\n", 
-                      contadorDetecciones, valorIR);
-    } 
-    // El objeto terminó de pasar y el haz vuelve a estar libre
-    else if (!corteDetectado && hazBloqueado) {
-        hazBloqueado = false;
+            Serial.println();
+            Serial.println("******************************************************************");
+            Serial.printf(" >>> [COGOLLERA CAPTURADA #%lu] ¡BICHO GRANDE DETECTADO! <<<\n", contadorCogolleras);
+            Serial.printf("     Sensores cortados: Haz 1 (%d >= %d) | Haz 2 (%d >= %d)\n", v1, umbral1, v2, umbral2);
+            Serial.println("******************************************************************");
+        }
+    }
+    // CASO 2: SOLO UNO DE LOS HACES SE CORTA -> BICHO CHICO / POLVILLO (DESCARTADO)
+    else if (corte1 || corte2) {
+        if (!cogolleraEnCurso && !descarteEnCurso) {
+            descarteEnCurso = true;
+            contadorDescartes++;
+            Serial.printf("[Descarte #%lu] Objeto chico ignorado (Haz 1: %d | Haz 2: %d)\n", 
+                          contadorDescartes, v1, v2);
+        }
+    }
+    // CASO 3: AMBOS HACES LIBRES -> SE RESTABLECEN LOS DISPARADORES
+    else {
+        cogolleraEnCurso = false;
+        descarteEnCurso  = false;
     }
 
-    // Apagado automático del LED testigo una vez cumplido el pulso visual
-    if (!hazBloqueado && ahora >= tiempoApagarLED) {
+    // Apagado del LED tras cumplirse el pulso de aviso visual
+    if (!cogolleraEnCurso && ahora >= tiempoApagarLED) {
         digitalWrite(PIN_LED_EXTERNO, LOW);
         digitalWrite(PIN_LED_AZUL, LOW);
     }
 
-    // Reporte periódico cada 1.5 segundos cuando no hay actividad
-    if (ahora - tiempoUltimoReporte >= 1500) {
+    // Reporte de vigilancia periódica en reposo cada 2 segundos
+    if (ahora - tiempoUltimoReporte >= 2000) {
         tiempoUltimoReporte = ahora;
-        if (!hazBloqueado) {
-            Serial.printf("[Vigilancia] IR: %4d (Umbral: %4d) | Detecciones: %lu | LED: [APAGADO]\n", 
-                          valorIR, umbralDeteccion, contadorDetecciones);
+        if (!corte1 && !corte2) {
+            Serial.printf("[Vigilancia Reposo] Haces libres (S1: %4d, S2: %4d) | Cogolleras: %lu | Descartes: %lu\n", 
+                          v1, v2, contadorCogolleras, contadorDescartes);
         }
     }
 }

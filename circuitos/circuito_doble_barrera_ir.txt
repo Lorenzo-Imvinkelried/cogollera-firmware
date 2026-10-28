@@ -1,0 +1,117 @@
+================================================================================
+   CIRCUITO DE CONEXION: DOBLE BARRERA IR PARA DETECCIÓN DE COGOLLERA (BICHO GRANDE)
+================================================================================
+Microcontrolador: ESP32-S V1.1 (38 Pines)
+Orientación: USB-C arriba mirando al frente, PCB con dorso visible / Panza abajo.
+
+--------------------------------------------------------------------------------
+1. PRINCIPIO DE FUNCIONAMIENTO (FILTRO DE TAMAÑO)
+--------------------------------------------------------------------------------
+- Objetivo: Evitar falsos positivos por polvillo, hojas secas o bichos diminutos.
+- Lógica de detección:
+  * Si pasa un bicho diminuto (1-2 mm): Solo corta el Haz 1 O el Haz 2 -> SE IGNORA.
+  * Si cae una COGOLLERA / bicho grande (15-25 mm): Por su tamaño corta AMBOS 
+    haces al mismo tiempo -> SE CONTABILIZA (+1) Y SE ENCIENDE LA ALERTA.
+
+--------------------------------------------------------------------------------
+2. LISTA DE MATERIALES
+--------------------------------------------------------------------------------
+- 1x ESP32-S (38 pines)
+- 2x Emisores Infrarrojos (LED transparente / azulado claro) [TX1 y TX2]
+- 2x Receptores Infrarrojos (Fototransistor lente negra)       [RX1 y RX2]
+- 1x LED visible testigo (rojo, verde o azul)                [GPIO 26]
+- 2x Resistencias de 120 Ω o 220 Ω (para los Emisores IR)
+- 2x Resistencias de 47 kΩ o 100 kΩ (para los Receptores IR)
+- 1x Resistencia de 220 Ω (para el LED visible testigo)
+- Cables jumper para protoboard
+
+--------------------------------------------------------------------------------
+3. ASIGNACIÓN EXACTA DE PINES EN EL ESP32
+--------------------------------------------------------------------------------
+* ALIMENTACIÓN COMÚN:
+  - 3V3 (Pin 19 Der) ───> Carril Rojo (+) de la protoboard (3.3V)
+  - GND (Pin 06 Der) ───> Carril Azul (-) de la protoboard (Tierra)
+
+* ENTRADAS ANALÓGICAS PARA RECEPTORES:
+  - Receptor 1 (RX1) ───> GPIO 34 / P34 (Pin 15 Der)
+  - Receptor 2 (RX2) ───> GPIO 35 / P35 (Pin 14 Der)
+
+* SALIDA PARA LED TESTIGO:
+  - LED Alerta       ───> GPIO 26 / P26 (Pin 10 Der)
+
+--------------------------------------------------------------------------------
+4. DIAGRAMA ESQUEMÁTICO COMPLETO
+--------------------------------------------------------------------------------
+
+[PAR INFRARROJO 1: HAZ SUPERIOR / HAZ "A"]
+-----------------------------------------------------------------
+Emisor 1 (TX1):
+  Carril (+) 3.3V ──>[Resistencia 120Ω/220Ω]──>(+) LED IR 1 (-)──> Carril (-) GND
+
+Receptor 1 (RX1):
+  Carril (+) 3.3V ──>[Resistencia 47kΩ/100kΩ]──┬──>(+) Fototransistor 1 (-)──> Carril (-) GND
+                                               │
+                                               └──> ESP32 GPIO 34 (P34)
+
+[PAR INFRARROJO 2: HAZ INFERIOR / HAZ "B"]
+-----------------------------------------------------------------
+Emisor 2 (TX2):
+  Carril (+) 3.3V ──>[Resistencia 120Ω/220Ω]──>(+) LED IR 2 (-)──> Carril (-) GND
+
+Receptor 2 (RX2):
+  Carril (+) 3.3V ──>[Resistencia 47kΩ/100kΩ]──┬──>(+) Fototransistor 2 (-)──> Carril (-) GND
+                                               │
+                                               └──> ESP32 GPIO 35 (P35)
+
+[LED TESTIGO DE CAPTURA DE COGOLLERA]
+-----------------------------------------------------------------
+  ESP32 GPIO 26 (Pin 10 Der) ──>[Resistencia 220Ω]──>(+) LED (-)──> Carril (-) GND
+
+--------------------------------------------------------------------------------
+5. MAPA DE PINES FÍSICO (VISTA PANZA ABAJO / USB-C ARRIBA)
+--------------------------------------------------------------------------------
+
+          LADO IZQUIERDO                      LADO DERECHO
+   01 ● [ CLK ]                        [ 5V  ] ● 01
+   02 ● [ SDD ]                        [ CMD ] ● 02
+   03 ● [ SD1 ]                        [ SD3 ] ● 03
+   04 ● [ P15 ]                        [ SD2 ] ● 04
+   05 ● [ P2  ]                        [ P13 ] ● 05
+   06 ● [ P0  ]                        [ GND ] ● 06 ───> Carril Azul (-) GND
+   07 ● [ P4  ]                        [ P12 ] ● 07
+   08 ● [ P16 ]                        [ P14 ] ● 08
+   09 ● [ P17 ]                        [ P27 ] ● 09
+   10 ● [ P5  ]                        [ P26 ] ● 10 ───> Al LED Testigo (+220Ω)
+   11 ● [ P18 ]                        [ P25 ] ● 11
+   12 ● [ P19 ]                        [ P33 ] ● 12
+   13 ● [ GND ]                        [ P32 ] ● 13
+   14 ● [ P21 ]                        [ P35 ] ● 14 ───> Señal Receptor 2 (RX2)
+   15 ● [ RX  ]                        [ P34 ] ● 15 ───> Señal Receptor 1 (RX1)
+   16 ● [ TX  ]                        [ 5VN ] ● 16
+   17 ● [ P22 ]                        [ SVP ] ● 17
+   18 ● [ P23 ]                        [ EN  ] ● 18
+   19 ● [ GND ]                        [ 3V3 ] ● 19 ───> Carril Rojo (+) 3.3V
+
+--------------------------------------------------------------------------------
+6. DISPOSICIÓN FÍSICA DE LOS SENSORES EN LA TRAMPA / TUBO DE CAÍDA
+--------------------------------------------------------------------------------
+Para que funcione como clasificador de tamaño:
+
+Opción recomendada: DOS HACES PARALELOS SEPARADOS POR 8 a 12 mm
+
+        EMISORES                                 RECEPTORES
+     ┌─────────────┐                          ┌─────────────┐
+     │  TX1 (IR)   │ ════════════════════════>│  RX1 (IR)   │  (Haz 1 - GPIO 34)
+     └─────────────┘                          └─────────────┘
+           │                                         │
+     Separación de 8 a 12 mm                   Separación de 8 a 12 mm
+           │                                         │
+     ┌─────────────┐                          ┌─────────────┐
+     │  TX2 (IR)   │ ════════════════════════>│  RX2 (IR)   │  (Haz 2 - GPIO 35)
+     └─────────────┘                          └─────────────┘
+
+* Comportamiento:
+  1. Si cae una mota de polvo o bicho chico (< 5 mm): Pasa cortando solo un haz.
+  2. Si cae una COGOLLERA (15 a 30 mm): Corta ambos haces al mismo tiempo.
+================================================================================
+

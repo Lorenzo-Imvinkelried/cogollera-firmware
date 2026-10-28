@@ -18,7 +18,9 @@ Este documento (`README.md`) resume y reemplaza la necesidad de consultar esos a
 
 | Carpeta / Archivo | ¿Para qué sirve? |
 | :--- | :--- |
-| **`src/`** | Carpeta principal de código fuente. Aquí se encuentra el archivo de entrada [`src/main.cpp`](file:///d:/Usuario/Desktop/proyecto-cogollera/src/main.cpp). |
+| **`src/`** | Carpeta principal de código fuente. Aquí se encuentra el archivo de entrada [`src/main.cpp`](file:///d:/Usuario/Desktop/cogollera-firmware/src/main.cpp). |
+| **`circuitos/`** | Diagramas esquemáticos y guías paso a paso de conexión en protoboard (`.txt`). |
+| **`ejemplos/`** | Ejemplos independientes y modulares de prueba (LEDs, Wi-Fi, BLE, Supabase, Infrarrojos). |
 | **`include/`** | Para archivos de cabecera C/C++ (`.h`). Sirve para compartir declaraciones de funciones, estructuras o constantes entre varios archivos sin duplicar código. |
 | **`lib/`** | Para librerías locales y módulos propios del proyecto. Si creas un módulo específico (por ejemplo, control de sensores o reles), se coloca aquí en su propia subcarpeta. |
 | **`test/`** | Para tests unitarios automatizados que verifican el funcionamiento del código en el microcontrolador. |
@@ -84,6 +86,7 @@ Los paquetes se descargan y almacenan a nivel de usuario en tu disco local en:
 ## 5. Ejemplos Modulares (`ejemplos/`)
 
 El proyecto cuenta con ejemplos de prueba independientes y listos para usar:
+0. `000-test-pines-salidas.cpp`: Test de diagnóstico general (árbol de navidad) para medir con multímetro o LED cada salida digital segura de la placa.
 1. `01-led-interno-onoff.cpp`: Encendido y apagado básico del LED integrado (GPIO 2).
 2. `02-temperatura-interna.cpp`: Lectura de la temperatura interna del chip con `temperatureRead()`.
 3. `03-conexion-wifi-servidor-web.cpp`: Conexión Wi-Fi y servidor web local HTTP para control.
@@ -91,6 +94,7 @@ El proyecto cuenta con ejemplos de prueba independientes y listos para usar:
 5. `05-ble-control-nrfconnect.cpp`: Integración completa de telemetría hacia Supabase (Wi-Fi + HTTPS) con control local en tiempo real por Bluetooth Low Energy usando la app **nRF Connect**.
 6. `06-led-externo-onoff.cpp`: Control de parpadeo de LED externo en protoboard (GPIO 26) con resistencia de protección y diagnóstico sincronizado con el LED interno.
 7. `07-detector-infrarrojo.cpp`: Detector de barrera/obstáculos infrarrojo (LED IR + Fototransistor) usando entrada analógica (GPIO 34) con umbral calibrable y alerta visual por LED.
+8. `08-doble-barrera-cogollera.cpp`: Doble barrera infrarroja (GPIO 34 y GPIO 35) con clasificador de tamaño para detectar capturas de insectos grandes (cogolleras) y descartar bichos pequeños o polvillo.
 
 ### 💡 Optimización de Memoria RAM con NimBLE
 El ESP32 utiliza por defecto la librería Bluetooth clásica de Espressif (*Bluedroid*), la cual consume **más de 100 KB de memoria RAM**. Al combinar Bluetooth con peticiones seguras HTTPS a la nube (Supabase), la memoria se agotaba y provocaba el error `(-16) BIGNUM - Memory allocation failed`.

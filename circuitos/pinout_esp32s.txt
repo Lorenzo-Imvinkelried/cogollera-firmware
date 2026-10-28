@@ -1,0 +1,42 @@
+PANZA ABAJO - USB C PARA ARRIBA
+
+==============================================================
+                    ESP32-S V1.1 (38 PINES) - VISTA TRASERA
+            (Orientación: USB-C arriba mirando hacia el frente,
+             Placa dada vuelta / "Panza abajo" / Cara de soldaduras)
+       ==============================================================
+
+                         ┌─────────────────────┐
+                         │   PUERTO  USB-C     │
+             ┌───────────┴─────────────────────┴───────────┐
+             │                                             │
+             │              [ DORSO DE PCB ]               │
+             │                                             │
+[ LADO IZQUIERDO ]                                 [ LADO DERECHO ]
+(De arriba a abajo)                               (De arriba a abajo)
+
+Flash SPI  [ CLK ] ──● 01                       01 ●── [ 5V  ]  Alimentación
+Flash SPI  [ SDD ] ──● 02                       02 ●── [ GND falso ]  es cmd flash
+Flash SPI  [ SD1 ] ──● 03                       03 ●── [ SD3 ]  Flash SPI
+GPIO 15    [ P15 ] ──● 04                       04 ●── [ SD2 ]  Flash SPI
+GPIO 2     [ P2  ] ──● 05                       05 ●── [ P13 ]  GPIO 13
+GPIO 0     [ P0  ] ──● 06                       06 ●── [ GND ]  Tierra
+GPIO 4     [ P4  ] ──● 07                       07 ●── [ P12 ]  GPIO 12
+GPIO 16    [ P16 ] ──● 08                       08 ●── [ P14 ]  GPIO 14
+GPIO 17    [ P17 ] ──● 09                       09 ●── [ P27 ]  GPIO 27
+GPIO 5     [ P5  ] ──● 10                       10 ●── [ P26 ]  GPIO 26(3.3v) 
+GPIO 18    [ P18 ] ──● 11                       11 ●── [ P25 ]  GPIO 25
+GPIO 19    [ P19 ] ──● 12                       12 ●── [ P33 ]  GPIO 33
+Tierra     [ GND ] ──● 13                       13 ●── [ P32 ]  GPIO 32
+I2C SDA    [ P21 ] ──● 14                       14 ●── [ P35 ]  GPIO 35
+UART RX0   [ RX  ] ──● 15                       15 ●── [ P34 ]  GPIO 34
+UART TX0   [ TX  ] ──● 16                       16 ●── [ 5VN ]  GPIO 39
+I2C SCL    [ P22 ] ──● 17                       17 ●── [ SVP ]  GPIO 36
+GPIO 23    [ P23 ] ──● 18                       18 ●── [ EN  ]  Reset
+Tierra     [ GND ] ──● 19                       19 ●── [ 3V3 ]  Alimentación
+             │                                             │
+             │           ░░░░░░░░░░░░░░░░░░░░              │
+             │           ░░  ANTENA PCB    ░░              │
+             │           ░░ (PARTE INFER.) ░░              │
+             └─────────────────────────────────────────────┘
+
