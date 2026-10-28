@@ -1,0 +1,102 @@
+================================================================================
+          CIRCUITO DE CONEXION: LED EXTERNO CON RESISTENCIA EN PROTOBOARD
+================================================================================
+Microcontrolador: ESP32-S V1.1 (38 Pines)
+Orientación: USB-C arriba, PCB con dorso visible / Panza abajo.
+
+--------------------------------------------------------------------------------
+1. MATERIALES NECESARIOS
+--------------------------------------------------------------------------------
+1x Placa ESP32-S (38 pines) ya insertada en la protoboard.
+1x Diodo LED estándar (de cualquier color: rojo, verde, azul, amarillo, blanco).
+1x Resistencia de 220 Ω, 330 Ω, 470 Ω o 1 kΩ (1000 Ω).
+2x Cables jumper (macho-macho) o conexión directa en los orificios de la protoboard.
+
+--------------------------------------------------------------------------------
+2. CÓMO IDENTIFICAR LA RESISTENCIA (CÓDIGO DE COLORES)
+--------------------------------------------------------------------------------
+Cualquiera de estas resistencias sirve y protegerá tanto al LED como al ESP32:
+- 220 Ω : [ ROJO  - ROJO    - MARRÓN  ] (Brillo óptimo)
+- 330 Ω : [ NARANJA - NARANJA - MARRÓN ] (Muy recomendado)
+- 470 Ω : [ AMARILLO - VIOLETA - MARRÓN ] (Excelente)
+- 1 kΩ  : [ MARRÓN - NEGRO   - ROJO    ] (Brillo un poco menor, máxima protección)
+
+* Nota: Las resistencias NO tienen polaridad (da igual en qué sentido las conectes).
+
+--------------------------------------------------------------------------------
+3. CÓMO IDENTIFICAR LA POLARIDAD DEL LED
+--------------------------------------------------------------------------------
+El LED solo deja pasar corriente en una dirección. Si lo conectas al revés no
+se quema, simplemente no va a prender:
+
+         ╭─────────╮
+         │  (LED)  │
+         ╰─┬─────┬─╯
+           │     │
+           │     └── PATA CORTA = CÁTODO (-) -> Va hacia GND (Tierra).
+           │         (Si te fijas, la base plástica tiene un lado aplanado).
+           │
+           └──────── PATA LARGA = ÁNODO (+)  -> Va hacia la Resistencia y el GPIO.
+
+--------------------------------------------------------------------------------
+4. DIAGRAMA ESQUEMÁTICO DEL CIRCUITO
+--------------------------------------------------------------------------------
+
+  ESP32 Pin 10 Der. [ GPIO 26 ]
+               │
+               ▼
+       ┌───────────────┐
+       │  RESISTENCIA  │ (220Ω / 330Ω / 1kΩ)
+       └───────┬───────┘
+               │
+               ▼
+        Pata Larga (+) [ ÁNODO ]
+           ╭───────╮
+           │  LED  │
+           ╰───┬───╯
+        Pata Corta (-) [ CÁTODO ]
+               │
+               ▼
+  ESP32 Pin 06 Der. [ GND - Tierra ] (o cualquier GND del ESP32)
+
+--------------------------------------------------------------------------------
+5. MAPA DE CONEXIÓN FÍSICA EN LA PROTOBOARD
+--------------------------------------------------------------------------------
+Usando tu mapa de pines (USB-C mirando arriba, cara dorsal/panza abajo):
+
+          LADO IZQUIERDO                      LADO DERECHO
+   01 ● [ CLK ]                        [ 5V  ] ● 01
+   02 ● [ SDD ]                        [ CMD ] ● 02
+   03 ● [ SD1 ]                        [ SD3 ] ● 03
+   04 ● [ P15 ]                        [ SD2 ] ● 04
+   05 ● [ P2  ]                        [ P13 ] ● 05
+   06 ● [ P0  ]                        [ GND ] ● 06 ───> [CABLE A CÁTODO (-) DEL LED]
+   07 ● [ P4  ]                        [ P12 ] ● 07
+   08 ● [ P16 ]                        [ P14 ] ● 08
+   09 ● [ P17 ]                        [ P27 ] ● 09
+   10 ● [ P5  ]              (P26) * ─> [ P26 ] ● 10 ───> [RESISTENCIA A ÁNODO (+) DEL LED]
+   11 ● [ P18 ]                        [ P25 ] ● 11
+   12 ● [ P19 ]                        [ P33 ] ● 12
+   13 ● [ GND ]                        [ P32 ] ● 13
+   14 ● [ P21 ]                        [ P35 ] ● 14
+   15 ● [ RX  ]                        [ P34 ] ● 15
+   16 ● [ TX  ]                        [ 5VN ] ● 16
+   17 ● [ P22 ]                        [ SVP ] ● 17
+   18 ● [ P23 ]                        [ EN  ] ● 18
+   19 ● [ GND ]                        [ 3V3 ] ● 19
+
+--------------------------------------------------------------------------------
+6. PASO A PASO PARA CONECTARLO:
+--------------------------------------------------------------------------------
+Opción A: Conexión directa en la pista de la protoboard
+1. Ubica el pin P26 (Pin 10 del lado derecho contando desde el 5V de arriba).
+2. Conecta un extremo de la resistencia en la misma fila del pin P26.
+3. Conecta el otro extremo de la resistencia en una fila libre de la protoboard.
+4. En esa misma fila libre, conecta la PATA LARGA (+) del LED.
+5. Conecta la PATA CORTA (-) del LED en otra fila libre.
+6. Mediante un cable jumper, conecta esa fila de la pata corta al pin GND
+   (Pin 06 del lado derecho, o al carril azul "-" de la protoboard si lo usas como tierra).
+
+¡Listo! Ya tienes el circuito armado y seguro.
+================================================================================
+

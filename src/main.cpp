@@ -1,468 +1,148 @@
 #include <Arduino.h>
-#include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include <HTTPClient.h>
-#include <NimBLEDevice.h>
 
-// =============================================================================
-// FIRMWARE COGOLLERA IOT: SUPABASE CLOUD + CONTROL LOCAL VÍA NIMBLE
-// =============================================================================
-// Utiliza NimBLE-Arduino:
-//  - Consume apenas ~20 KB de RAM (versus ~110 KB del BLE clásico).
-//  - Deja libre más de 120 KB de RAM para el apretón criptográfico HTTPS (TLS).
-//  - Elimina por completo el error "(-16) BIGNUM - Memory allocation failed".
-// =============================================================================
+/*
+ * ==============================================================================
+ * EJEMPLO 07: Detector de Barrera IR de Alta Velocidad con LED Testigo Externo
+ * ==============================================================================
+ * Placa: ESP32-S V1.1 (38 pines) - Vista Dorsal / Panza Abajo
+ * 
+ * Distribución de conexiones según 'circuito_detector_infrarrojo.txt':
+ * 1. Emisor IR (LED transparente):
+ *    - Ánodo (+) a Resistencia 120Ω (o 220Ω) conectada a 3V3 (Carril rojo +).
+ *    - Cátodo (-) a GND (Carril azul -).
+ * 
+ * 2. Receptor IR (Fototransistor lente negra):
+ *    - Colector a Resistencia 47kΩ a 3V3, y señal conectada a GPIO 34 (Pin 15 Der).
+ *    - Emisor a GND (Carril azul -).
+ * 
+ * 3. LED Testigo Externo (Aviso de detección):
+ *    - Conectado a GPIO 26 / P26 (Pin 10 Der) con Resistencia de 220Ω a Ánodo (+).
+ *    - Cátodo (-) a GND (Carril azul -).
+ * 
+ * Características del firmware:
+ * - Auto-calibración en el arranque: Mide el nivel de reposo y calcula el umbral óptimo.
+ * - Test inicial de LEDs: Hace parpadear el LED externo y el interno al encender.
+ * - Detección ultrarrápida sin delays: Muestreo continuo a miles de lecturas/seg.
+ * - Extensor de pulso: Mantiene encendido el LED externo 250 ms por cada corte.
+ */
 
-// =============================================================================
-// CONFIGURACIÓN DE RED WI-FI (2.4 GHz)
-// =============================================================================
-const char* ssid = "Horaim_Wiltel";
-const char* password = "lonapaju4";
+// Asignación de pines
+const int PIN_SENSOR_IR   = 34; // Pin P34 (Entrada analógica ADC1 - Pin 15 Der)
+const int PIN_LED_EXTERNO = 26; // Pin P26 (LED externo en protoboard - Pin 10 Der)
+const int PIN_LED_AZUL    = 2;  // LED azul integrado en la placa
 
-// =============================================================================
-// CONFIGURACIÓN DE SUPABASE
-// =============================================================================
-const char* SUPABASE_URL = "https://pqydjwpjclfnwfrzpsvb.supabase.co/rest/v1/mediciones";
-const char* SUPABASE_KEY = "sb_publishable_jGjzJtPJeXKfqIwatNmRIA_oqSGTYRZ";
+// Duración del pulso de luz del LED externo al detectar (milisegundos)
+const unsigned long TIEMPO_LED_VISUAL = 250;
 
-// Variable de intervalo de transmisión a Supabase (modificable en vivo por Bluetooth)
-unsigned long intervaloEnvioSupabaseMs = 10000; // 10 segundos por defecto
+// Variables dinámicas de calibración
+int valorReposo = 0;
+int umbralDeteccion = 3400; // Se calcula automáticamente al calibrar
 
-// =============================================================================
-// HARDWARE Y VARIABLES GLOBALES
-// =============================================================================
-const int PIN_LED = 2; // LED azul integrado en el ESP32
+// Variables de control de estado y tiempo
+bool hazBloqueado = false;
+unsigned long tiempoApagarLED = 0;
+unsigned long contadorDetecciones = 0;
+unsigned long tiempoUltimoReporte = 0;
 
-bool estadoLed = false;
-unsigned long intervaloParpadeoMs = 0; // 0 = sin parpadeo (modo normal/Supabase), > 0 = parpadeo cada X ms
-unsigned long ultimoParpadeo = 0;
-bool estadoLedBlink = false;
+void calibrarSensor() {
+    Serial.println("\n[CALIBRANDO] Evaluando luz ambiente con el haz libre...");
+    Serial.println("-> Asegurate de no tapar los sensores durante 1 segundo.");
 
-unsigned long ultimaTransmisionSupabase = 0;
-int contadorEnvios = 0;
-int ultimoCodigoHttp = 0;
-
-// Nombre Bluetooth visible en nRF Connect
-#define DISPOSITIVO_BLE_NOMBRE "ESP32_COGOLLERA_BLE"
-
-// =============================================================================
-// UUIDs BLUETOOTH LOW ENERGY
-// =============================================================================
-#define SERVICE_UUID           "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CHAR_LED_UUID          "beb5483e-36e1-4688-b7f5-ea07361b26a8" // Control fijo ON/OFF
-#define CHAR_BLINK_UUID        "c3d82a10-2b47-4933-912b-3e5e4fa01928" // Velocidad de parpadeo (ms)
-#define CHAR_INTERVALO_UUID    "1c95d5e3-d8f7-413a-bf3d-7a2e5d7be87e" // Intervalo de envío a Supabase (ms)
-#define CHAR_CMD_UUID          "d9d75094-1188-466d-96e0-2580dfbf5535" // Comandos de texto
-#define CHAR_TELEMETRIA_UUID   "a5b9e728-66a7-4c07-b37d-2495d469279a" // Telemetría y estado en vivo
-
-NimBLEServer* pServidor = nullptr;
-NimBLECharacteristic* pCharLed = nullptr;
-NimBLECharacteristic* pCharBlink = nullptr;
-NimBLECharacteristic* pCharIntervalo = nullptr;
-NimBLECharacteristic* pCharComando = nullptr;
-NimBLECharacteristic* pCharTelemetria = nullptr;
-
-bool clienteConectado = false;
-bool clienteAnteriorConectado = false;
-
-// Destello rápido al enviar datos con éxito a Supabase
-void destelloEnvio() {
-    if (intervaloParpadeoMs > 0) return; // Si tiene un parpadeo personalizado activo, no interferir
-    for (int i = 0; i < 2; i++) {
-        digitalWrite(PIN_LED, HIGH);
-        delay(60);
-        digitalWrite(PIN_LED, LOW);
-        delay(60);
+    // Parpadeo sincronizado de ambos LEDs (externo e interno) para verificar funcionamiento
+    long suma = 0;
+    const int MUESTRAS = 40;
+    for (int i = 0; i < MUESTRAS; i++) {
+        suma += analogRead(PIN_SENSOR_IR);
+        
+        bool estadoBlink = (i % 4 < 2);
+        digitalWrite(PIN_LED_EXTERNO, estadoBlink ? HIGH : LOW);
+        digitalWrite(PIN_LED_AZUL, estadoBlink ? HIGH : LOW);
+        
+        delay(25);
     }
-}
+    digitalWrite(PIN_LED_EXTERNO, LOW);
+    digitalWrite(PIN_LED_AZUL, LOW);
 
-// Asigna nombres claros a las características para que nRF Connect no diga "Unknown"
-void asignarNombreDescriptor(NimBLECharacteristic* pChar, const char* nombre) {
-    NimBLEDescriptor* pDesc = pChar->createDescriptor("2901", NIMBLE_PROPERTY::READ);
-    if (pDesc != nullptr) {
-        pDesc->setValue(nombre);
-    }
-}
+    valorReposo = suma / MUESTRAS;
 
-// Genera el texto resumen de la telemetría actual
-String generarResumenTelemetria() {
-    float temp = temperatureRead();
-    String wifiStatus = (WiFi.status() == WL_CONNECTED) ? "WiFi:OK" : "WiFi:OFF";
-    return "Ciclo #" + String(contadorEnvios) +
-           " | Temp: " + String(temp, 1) + " C" +
-           " | " + wifiStatus +
-           " | HTTP: " + String(ultimoCodigoHttp) +
-           " | Int: " + String(intervaloEnvioSupabaseMs / 1000) + "s";
-}
+    // El umbral se calcula automáticamente en el punto medio exacto
+    // entre el valor de reposo y el tope de corte (4095)
+    int margenDisponible = 4095 - valorReposo;
+    umbralDeteccion = valorReposo + (margenDisponible * 0.50);
 
-// =============================================================================
-// ENVÍO DE DATOS A SUPABASE VÍA HTTPS POST
-// =============================================================================
-bool enviarMedicionASupabase(float temp, int cont) {
-    if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[SUPABASE] Wi-Fi desconectado. Reintentando conexion...");
-        WiFi.reconnect();
-        return false;
-    }
+    Serial.printf("-> Nivel medido en reposo (Libre): %d\n", valorReposo);
+    Serial.printf("-> Umbral dinamico asignado:     %d\n", umbralDeteccion);
 
-    Serial.printf("[MEMORIA] Heap libre antes de HTTPS: %u bytes (Min: %u bytes)\n", ESP.getFreeHeap(), ESP.getMinFreeHeap());
-
-    WiFiClientSecure client;
-    client.setInsecure(); // No validar certificados SSL en el ESP32
-
-    HTTPClient https;
-    https.setTimeout(10000);
-    if (!https.begin(client, SUPABASE_URL)) {
-        Serial.println("[SUPABASE] Error: No se pudo iniciar el cliente HTTPS.");
-        return false;
-    }
-
-    https.addHeader("Content-Type", "application/json");
-    https.addHeader("apikey", SUPABASE_KEY);
-    https.addHeader("Authorization", String("Bearer ") + SUPABASE_KEY);
-    https.addHeader("Prefer", "return=minimal");
-
-    // Formato JSON: {"temperatura": 37.25, "contador": 1}
-    String payload = "{\"temperatura\":" + String(temp, 2) + ",\"contador\":" + String(cont) + "}";
-
-    Serial.printf("[SUPABASE] Enviando medicion #%d (%.2f °C)... ", cont, temp);
-    int codigoHttp = https.POST(payload);
-    ultimoCodigoHttp = codigoHttp;
-
-    bool exito = (codigoHttp >= 200 && codigoHttp < 300);
-    if (exito) {
-        Serial.printf("EXITO (HTTP %d)\n", codigoHttp);
-        destelloEnvio();
-    } else if (codigoHttp > 0) {
-        Serial.printf("RESPUESTA HTTP %d\n", codigoHttp);
+    if (valorReposo > 3700) {
+        Serial.println("[AVISO] El sensor recibe poca luz. Alinea los LEDs frente a frente.");
     } else {
-        Serial.printf("FALLO: %s\n", https.errorToString(codigoHttp).c_str());
+        Serial.println("-> Calibracion EXITOSA: Sistema activo y vigilando.");
     }
-
-    https.end();
-    client.stop();
-
-    // Si hay un celular conectado por Bluetooth, le avisamos de la nueva medición
-    if (clienteConectado && pCharTelemetria != nullptr) {
-        String datos = generarResumenTelemetria();
-        pCharTelemetria->setValue(datos.c_str());
-        pCharTelemetria->notify();
-    }
-
-    return exito;
+    Serial.println("--------------------------------------------------");
 }
 
-// =============================================================================
-// CALLBACKS DEL SERVIDOR NIMBLE (Conexión / Desconexión)
-// =============================================================================
-class ServidorCallbacks : public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer* pServer) override {
-        clienteConectado = true;
-        Serial.println("\n[BLE] >>> Celular conectado (nRF Connect) <<<");
-    }
-
-    void onDisconnect(NimBLEServer* pServer) override {
-        clienteConectado = false;
-        Serial.println("[BLE] >>> Celular desconectado <<<");
-    }
-};
-
-// =============================================================================
-// CALLBACKS: CONTROL FIJO DEL LED
-// =============================================================================
-class LedCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic* pCharacteristic) override {
-        std::string val = pCharacteristic->getValue();
-        String valor = String(val.c_str());
-        valor.trim();
-
-        intervaloParpadeoMs = 0;
-        pCharBlink->setValue("0");
-
-        if (valor == "1" || valor.equalsIgnoreCase("ON")) {
-            estadoLed = true;
-            digitalWrite(PIN_LED, HIGH);
-            pCharacteristic->setValue("1");
-            Serial.println("[BLE] LED encendido fijo.");
-        } else if (valor == "0" || valor.equalsIgnoreCase("OFF")) {
-            estadoLed = false;
-            digitalWrite(PIN_LED, LOW);
-            pCharacteristic->setValue("0");
-            Serial.println("[BLE] LED apagado.");
-        }
-    }
-};
-
-// =============================================================================
-// CALLBACKS: VELOCIDAD DE PARPADEO DEL LED (ms)
-// =============================================================================
-class BlinkCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic* pCharacteristic) override {
-        std::string val = pCharacteristic->getValue();
-        String valor = String(val.c_str());
-        valor.trim();
-        valor.toLowerCase();
-        valor.replace("ms", "");
-        valor.trim();
-
-        long ms = valor.toInt();
-        if (ms == 0 && val.length() >= 2) {
-            const uint8_t* data = (const uint8_t*)val.data();
-            ms = data[0] | (data[1] << 8);
-        }
-
-        if (ms > 0) {
-            intervaloParpadeoMs = ms;
-            ultimoParpadeo = millis();
-            Serial.printf("[BLE] Parpadeo LED fijado en: cada %lu ms\n", intervaloParpadeoMs);
-            pCharacteristic->setValue(String(intervaloParpadeoMs).c_str());
-        } else {
-            intervaloParpadeoMs = 0;
-            digitalWrite(PIN_LED, LOW);
-            estadoLed = false;
-            pCharLed->setValue("0");
-            pCharacteristic->setValue("0");
-            Serial.println("[BLE] Parpadeo desactivado.");
-        }
-    }
-};
-
-// =============================================================================
-// CALLBACKS: MODIFICACIÓN DEL INTERVALO DE ENVÍO A SUPABASE
-// =============================================================================
-class IntervaloCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic* pCharacteristic) override {
-        std::string val = pCharacteristic->getValue();
-        String valor = String(val.c_str());
-        valor.trim();
-        valor.toLowerCase();
-        valor.replace("ms", "");
-        valor.trim();
-
-        long nuevoIntervalo = valor.toInt();
-        if (nuevoIntervalo == 0 && val.length() >= 2) {
-            const uint8_t* data = (const uint8_t*)val.data();
-            nuevoIntervalo = data[0] | (data[1] << 8);
-        }
-
-        // Permitimos intervalos entre 1000 ms (1 segundo) y 3600000 ms (1 hora)
-        if (nuevoIntervalo >= 1000 && nuevoIntervalo <= 3600000) {
-            intervaloEnvioSupabaseMs = nuevoIntervalo;
-            Serial.printf("[BLE] >>> Nuevo intervalo hacia Supabase: %lu ms (%.1f seg) <<<\n",
-                          intervaloEnvioSupabaseMs, (float)intervaloEnvioSupabaseMs / 1000.0);
-            pCharacteristic->setValue(String(intervaloEnvioSupabaseMs).c_str());
-        } else {
-            Serial.printf("[BLE] Error en intervalo: '%s'. Minimo 1000 ms.\n", valor.c_str());
-        }
-    }
-};
-
-// =============================================================================
-// CALLBACKS: INTÉRPRETE DE COMANDOS DE TEXTO
-// =============================================================================
-class ComandoCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic* pCharacteristic) override {
-        std::string val = pCharacteristic->getValue();
-        String cmd = String(val.c_str());
-        cmd.trim();
-
-        Serial.printf("[BLE COMANDO] Recibido: '%s'\n", cmd.c_str());
-        String respuesta = "";
-
-        if (cmd.equalsIgnoreCase("ENVIAR") || cmd.equalsIgnoreCase("POST")) {
-            // Fuerza un envío inmediato a Supabase
-            contadorEnvios++;
-            float temp = temperatureRead();
-            bool ok = enviarMedicionASupabase(temp, contadorEnvios);
-            respuesta = ok ? ("OK: Medida #" + String(contadorEnvios) + " enviada a Supabase") : "ERR: Fallo conexion Supabase";
-        } else if (cmd.equalsIgnoreCase("LED ON")) {
-            intervaloParpadeoMs = 0;
-            pCharBlink->setValue("0");
-            estadoLed = true;
-            digitalWrite(PIN_LED, HIGH);
-            pCharLed->setValue("1");
-            respuesta = "OK: LED encendido";
-        } else if (cmd.equalsIgnoreCase("LED OFF")) {
-            intervaloParpadeoMs = 0;
-            pCharBlink->setValue("0");
-            estadoLed = false;
-            digitalWrite(PIN_LED, LOW);
-            pCharLed->setValue("0");
-            respuesta = "OK: LED apagado";
-        } else if (cmd.startsWith("BLINK ")) {
-            long ms = cmd.substring(6).toInt();
-            if (ms > 0) {
-                intervaloParpadeoMs = ms;
-                pCharBlink->setValue(String(intervaloParpadeoMs).c_str());
-                respuesta = "OK: Parpadeo cada " + String(intervaloParpadeoMs) + " ms";
-            } else {
-                intervaloParpadeoMs = 0;
-                digitalWrite(PIN_LED, LOW);
-                pCharBlink->setValue("0");
-                respuesta = "OK: Parpadeo apagado";
-            }
-        } else if (cmd.startsWith("SET_INTERVAL ")) {
-            long ms = cmd.substring(13).toInt();
-            if (ms >= 1000) {
-                intervaloEnvioSupabaseMs = ms;
-                pCharIntervalo->setValue(String(intervaloEnvioSupabaseMs).c_str());
-                respuesta = "OK: Intervalo Supabase = " + String(intervaloEnvioSupabaseMs) + " ms";
-            } else {
-                respuesta = "ERR: Minimo 1000 ms";
-            }
-        } else if (cmd.equalsIgnoreCase("TEMP")) {
-            float temp = temperatureRead();
-            respuesta = "Temp interna: " + String(temp, 2) + " C";
-        } else if (cmd.equalsIgnoreCase("STATUS") || cmd.equalsIgnoreCase("INFO")) {
-            respuesta = generarResumenTelemetria();
-        } else {
-            respuesta = "ERR: Comandos validos: 'ENVIAR', 'BLINK 200', 'LED ON', 'LED OFF', 'TEMP', 'INFO'";
-        }
-
-        Serial.println("  -> Respuesta BLE: " + respuesta);
-        pCharacteristic->setValue(respuesta.c_str());
-    }
-};
-
-// =============================================================================
-// CALLBACKS: LECTURA DIRECTA DE TELEMETRÍA (Flecha Read)
-// =============================================================================
-class TelemetriaCallbacks : public NimBLECharacteristicCallbacks {
-    void onRead(NimBLECharacteristic* pCharacteristic) override {
-        String datos = generarResumenTelemetria();
-        pCharacteristic->setValue(datos.c_str());
-        Serial.println("[BLE] Telemetria leida manualmente desde nRF Connect.");
-    }
-};
-
-// =============================================================================
-// SETUP
-// =============================================================================
 void setup() {
     Serial.begin(115200);
-    delay(1000);
+    delay(500);
 
-    pinMode(PIN_LED, OUTPUT);
-    digitalWrite(PIN_LED, LOW);
+    // Configuramos ambos LEDs como salidas digitales
+    pinMode(PIN_LED_EXTERNO, OUTPUT);
+    pinMode(PIN_LED_AZUL, OUTPUT);
 
-    Serial.println("\n=======================================================");
-    Serial.println("   COGOLLERA IOT: SUPABASE + NIMBLE BLUETOOTH (LOW RAM)");
-    Serial.println("=======================================================");
+    // Resolución de 12 bits para lectura analógica (0 - 4095)
+    analogReadResolution(12);
 
-    // 1. Iniciar NimBLE (Ultraligero en memoria RAM)
-    Serial.printf("[BLE] Iniciando servidor NimBLE: %s...\n", DISPOSITIVO_BLE_NOMBRE);
-    NimBLEDevice::init(DISPOSITIVO_BLE_NOMBRE);
-    pServidor = NimBLEDevice::createServer();
-    pServidor->setCallbacks(new ServidorCallbacks());
+    Serial.println();
+    Serial.println("==================================================");
+    Serial.println("  ESP32: BARRERA IR CON LED TESTIGO EN GPIO 26    ");
+    Serial.println("==================================================");
+    Serial.println("-> Sensor IR:  GPIO 34 (P34)");
+    Serial.println("-> LED Alerta: GPIO 26 (P26) y LED Azul (GPIO 2)");
 
-    NimBLEService* pServicio = pServidor->createService(SERVICE_UUID);
-
-    // Característica 1: Control Fijo del LED
-    pCharLed = pServicio->createCharacteristic(CHAR_LED_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
-    pCharLed->setCallbacks(new LedCallbacks());
-    pCharLed->setValue("0");
-    asignarNombreDescriptor(pCharLed, "Control Fijo LED (1=ON / 0=OFF)");
-
-    // Característica 2: Velocidad de Parpadeo en ms
-    pCharBlink = pServicio->createCharacteristic(CHAR_BLINK_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
-    pCharBlink->setCallbacks(new BlinkCallbacks());
-    pCharBlink->setValue("0");
-    asignarNombreDescriptor(pCharBlink, "Velocidad Parpadeo LED en ms (0=Apagado)");
-
-    // Característica 3: Intervalo de Envío a Supabase (ms)
-    pCharIntervalo = pServicio->createCharacteristic(CHAR_INTERVALO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
-    pCharIntervalo->setCallbacks(new IntervaloCallbacks());
-    pCharIntervalo->setValue(String(intervaloEnvioSupabaseMs).c_str());
-    asignarNombreDescriptor(pCharIntervalo, "Intervalo de Envio a Supabase en ms");
-
-    // Característica 4: Consola de Comandos
-    pCharComando = pServicio->createCharacteristic(CHAR_CMD_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
-    pCharComando->setCallbacks(new ComandoCallbacks());
-    pCharComando->setValue("Listo. Envia 'ENVIAR', 'BLINK 200' o 'INFO'");
-    asignarNombreDescriptor(pCharComando, "Consola de Comandos de Texto");
-
-    // Característica 5: Telemetría en Vivo (Read y Notify)
-    pCharTelemetria = pServicio->createCharacteristic(CHAR_TELEMETRIA_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
-    pCharTelemetria->setCallbacks(new TelemetriaCallbacks());
-    pCharTelemetria->setValue(generarResumenTelemetria().c_str());
-    asignarNombreDescriptor(pCharTelemetria, "Telemetria Sensor en Tiempo Real");
-
-    pServicio->start();
-
-    NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID(SERVICE_UUID);
-    pAdvertising->setScanResponse(true);
-    pAdvertising->start();
-    Serial.println("[BLE] Bluetooth NimBLE activo y listo.");
-
-    // 2. Iniciar Conexión Wi-Fi para Supabase
-    Serial.printf("[WIFI] Conectando a red: %s\n", ssid);
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, password);
-
-    int intentos = 0;
-    while (WiFi.status() != WL_CONNECTED && intentos < 25) {
-        delay(400);
-        Serial.print(".");
-        intentos++;
-    }
-
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("\n[WIFI] >>> Conectado con exito! <<<");
-        Serial.print("[WIFI] IP Asignada: ");
-        Serial.println(WiFi.localIP());
-
-        // Primer envío a Supabase al encender
-        contadorEnvios++;
-        float temp = temperatureRead();
-        enviarMedicionASupabase(temp, contadorEnvios);
-        ultimaTransmisionSupabase = millis();
-    } else {
-        Serial.println("\n[WIFI] No se pudo conectar de inmediato. Reintentara en segundo plano.");
-    }
-
-    Serial.println("=======================================================\n");
+    // Calibramos automáticamente al iniciar
+    calibrarSensor();
 }
 
-// =============================================================================
-// LOOP
-// =============================================================================
 void loop() {
+    // Lectura de alta velocidad (toma solo unos microsegundos)
+    int valorIR = analogRead(PIN_SENSOR_IR);
     unsigned long ahora = millis();
 
-    // Reconexión automática de Bluetooth si se desconecta el celular
-    if (!clienteConectado && clienteAnteriorConectado) {
-        delay(500);
-        pServidor->startAdvertising();
-        Serial.println("[BLE] Publicidad reiniciada.");
-        clienteAnteriorConectado = clienteConectado;
-    }
-    if (clienteConectado && !clienteAnteriorConectado) {
-        clienteAnteriorConectado = clienteConectado;
+    // Verificamos si el haz fue interrumpido
+    bool corteDetectado = (valorIR >= umbralDeteccion);
+
+    // DISPARO DE DETECCIÓN: Transición de libre a cortado
+    if (corteDetectado && !hazBloqueado) {
+        hazBloqueado = true;
+        contadorDetecciones++;
+
+        // Encendemos tanto el LED testigo externo como el interno
+        digitalWrite(PIN_LED_EXTERNO, HIGH);
+        digitalWrite(PIN_LED_AZUL, HIGH);
+
+        // Mantenemos encendido el LED por el tiempo visual mínimo (250ms)
+        tiempoApagarLED = ahora + TIEMPO_LED_VISUAL;
+
+        Serial.printf("[DETECCION #%lu] ¡¡ CORTE DETECTADO !! -> LED ENCENDIDO (IR: %d)\n", 
+                      contadorDetecciones, valorIR);
+    } 
+    // El objeto terminó de pasar y el haz vuelve a estar libre
+    else if (!corteDetectado && hazBloqueado) {
+        hazBloqueado = false;
     }
 
-    // Parpadeo no bloqueante del LED (si está configurado)
-    if (intervaloParpadeoMs > 0) {
-        if (ahora - ultimoParpadeo >= intervaloParpadeoMs) {
-            ultimoParpadeo = ahora;
-            estadoLedBlink = !estadoLedBlink;
-            digitalWrite(PIN_LED, estadoLedBlink ? HIGH : LOW);
+    // Apagado automático del LED testigo una vez cumplido el pulso visual
+    if (!hazBloqueado && ahora >= tiempoApagarLED) {
+        digitalWrite(PIN_LED_EXTERNO, LOW);
+        digitalWrite(PIN_LED_AZUL, LOW);
+    }
+
+    // Reporte periódico cada 1.5 segundos cuando no hay actividad
+    if (ahora - tiempoUltimoReporte >= 1500) {
+        tiempoUltimoReporte = ahora;
+        if (!hazBloqueado) {
+            Serial.printf("[Vigilancia] IR: %4d (Umbral: %4d) | Detecciones: %lu | LED: [APAGADO]\n", 
+                          valorIR, umbralDeteccion, contadorDetecciones);
         }
     }
-
-    // Transmisión periódica a Supabase (controlada por la variable intervaloEnvioSupabaseMs)
-    if (ahora - ultimaTransmisionSupabase >= intervaloEnvioSupabaseMs) {
-        ultimaTransmisionSupabase = ahora;
-
-        if (WiFi.status() == WL_CONNECTED) {
-            contadorEnvios++;
-            float temp = temperatureRead();
-            enviarMedicionASupabase(temp, contadorEnvios);
-        } else {
-            Serial.println("[WIFI] Desconectado. Reintentando...");
-            WiFi.reconnect();
-        }
-    }
-
-    delay(10); // Pausa cooperativa para FreeRTOS
 }

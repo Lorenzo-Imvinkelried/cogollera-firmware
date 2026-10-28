@@ -1,0 +1,161 @@
+================================================================================
+     CIRCUITO DE CONEXION: DETECTOR DE BARRERA IR CON LED TESTIGO EXTERNO
+================================================================================
+Microcontrolador: ESP32-S V1.1 (38 Pines)
+Orientación: USB-C arriba mirando al frente, PCB con dorso visible / Panza abajo.
+
+--------------------------------------------------------------------------------
+1. LISTA COMPLETA DE MATERIALES
+--------------------------------------------------------------------------------
+1x Placa ESP32-S (38 pines) en protoboard
+1x Emisor IR (LED de cápsula transparente o azulada clara)
+1x Receptor IR / Fototransistor (cápsula negra u oscura con filtro de luz visible)
+1x LED visible común (rojo, verde, amarillo, etc.) para aviso de detección
+1x Resistencia de 120 Ω o 220 Ω (para el Emisor IR)
+1x Resistencia de 47 kΩ o 100 kΩ (para el Receptor IR)
+1x Resistencia de 220 Ω (para el LED visible testigo)
+Cables jumper para la protoboard
+
+--------------------------------------------------------------------------------
+2. RESISTENCIAS: CÓDIGO DE COLORES A USAR
+--------------------------------------------------------------------------------
+- Para el Emisor IR:
+  * 120 Ω : [ MARRÓN  - ROJO    - MARRÓN  ] (Recomendada: mayor alcance y potencia)
+  * 220 Ω : [ ROJO    - ROJO    - MARRÓN  ] (Alternativa estándar)
+
+- Para el Receptor IR:
+  * 47 kΩ  : [ AMARILLO - VIOLETA - NARANJA ] (Recomendada: máxima velocidad)
+  * 100 kΩ : [ MARRÓN   - NEGRO   - AMARILLO] (Alternativa: máxima sensibilidad)
+
+- Para el LED visible testigo:
+  * 220 Ω : [ ROJO    - ROJO    - MARRÓN  ] (Protección ideal para el GPIO 26)
+
+--------------------------------------------------------------------------------
+3. IDENTIFICACIÓN DE POLARIDAD DE CADA COMPONENTE
+--------------------------------------------------------------------------------
+A) EMISOR IR (LED Transparente):
+   - Pata LARGA: Ánodo (+)    -> Hacia la resistencia de 120Ω/220Ω y a 3.3V.
+   - Pata CORTA: Cátodo (-)   -> Directo a GND (Tierra).
+
+B) RECEPTOR IR (Lente Negra / Fototransistor):
+   - Pata LARGA: Colector (C) -> Conecta a la resistencia de 47kΩ y al pin P34.
+   - Pata CORTA: Emisor (E)   -> Directo a GND (Tierra).
+   * Si no detecta nada al probarlo, simplemente invierte sus dos patitas.
+
+C) LED TESTIGO VISIBLE (Cualquier color):
+   - Pata LARGA: Ánodo (+)    -> Hacia la resistencia de 220Ω y al pin P26.
+   - Pata CORTA: Cátodo (-)   -> Directo a GND (Tierra).
+
+--------------------------------------------------------------------------------
+4. DIAGRAMA ESQUEMÁTICO DE LOS 3 CIRCUITOS
+--------------------------------------------------------------------------------
+
+[CIRCUITO 1: EMISOR IR - Luz infrarroja permanente]
+  ESP32 [ 3V3 ] (Pin 19 Der o Carril +)
+       │
+       ▼
+   [Resistencia 120Ω o 220Ω]
+       │
+       ▼
+   Pata Larga (+) [ ÁNODO ]
+     ╭───────╮
+     │LED IR │  (Haz infrarrojo invisible)
+     ╰───┬───╯
+   Pata Corta (-) [ CÁTODO ]
+       │
+       ▼
+  ESP32 [ GND ] (Pin 06 Der o Carril -)
+
+
+[CIRCUITO 2: RECEPTOR IR - Fototransistor de detección]
+  ESP32 [ 3V3 ] (Pin 19 Der o Carril +)
+       │
+       ▼
+   [Resistencia 47kΩ o 100kΩ] (Pull-up)
+       │
+       ├───> ESP32 [ GPIO 34 / P34 ] (Pin 15 Der - Entrada Analógica ADC1)
+       │
+       ▼
+   Pata Larga [ COLECTOR ]
+     ╭───────────────╮
+     │ RECEPTOR IR   │  (Lente negra)
+     ╰───────┬───────╯
+   Pata Corta [ EMISOR ]
+       │
+       ▼
+  ESP32 [ GND ] (Pin 06 Der o Carril -)
+
+
+[CIRCUITO 3: LED EXTERNO TESTIGO - Se enciende al cortar el haz]
+  ESP32 [ GPIO 26 / P26 ] (Pin 10 Der)
+       │
+       ▼
+   [Resistencia 220Ω]
+       │
+       ▼
+   Pata Larga (+) [ ÁNODO ]
+     ╭───────────────╮
+     │  LED VISIBLE  │  (Rojo, Verde o Azul)
+     ╰───────┬───────╯
+   Pata Corta (-) [ CÁTODO ]
+       │
+       ▼
+  ESP32 [ GND ] (Pin 06 Der o Carril -)
+
+--------------------------------------------------------------------------------
+5. MAPA DE PINES EN TU ESP32 (VISTA PANZA ABAJO / USB-C ARRIBA)
+--------------------------------------------------------------------------------
+
+          LADO IZQUIERDO                      LADO DERECHO
+   01 ● [ CLK ]                        [ 5V  ] ● 01
+   02 ● [ SDD ]                        [ CMD ] ● 02
+   03 ● [ SD1 ]                        [ SD3 ] ● 03
+   04 ● [ P15 ]                        [ SD2 ] ● 04
+   05 ● [ P2  ]                        [ P13 ] ● 05
+   06 ● [ P0  ]                        [ GND ] ● 06 ───> Carril Azul (-) GND
+   07 ● [ P4  ]                        [ P12 ] ● 07
+   08 ● [ P16 ]                        [ P14 ] ● 08
+   09 ● [ P17 ]                        [ P27 ] ● 09
+   10 ● [ P5  ]                        [ P26 ] ● 10 ───> A Resistencia 220Ω + LED Testigo
+   11 ● [ P18 ]                        [ P25 ] ● 11
+   12 ● [ P19 ]                        [ P33 ] ● 12
+   13 ● [ GND ]                        [ P32 ] ● 13
+   14 ● [ P21 ]                        [ P35 ] ● 14
+   15 ● [ RX  ]                        [ P34 ] ● 15 ───> A Señal Receptor IR
+   16 ● [ TX  ]                        [ 5VN ] ● 16
+   17 ● [ P22 ]                        [ SVP ] ● 17
+   18 ● [ P23 ]                        [ EN  ] ● 18
+   19 ● [ GND ]                        [ 3V3 ] ● 19 ───> Carril Rojo (+) 3.3V
+
+--------------------------------------------------------------------------------
+6. GUÍA DE ARMADO PASO A PASO EN LA PROTOBOARD
+--------------------------------------------------------------------------------
+Paso 1: Preparar la alimentación común:
+- Conecta un cable desde el pin 3V3 (Pin 19 Der) a la línea roja (+) de la protoboard.
+- Conecta un cable desde el pin GND (Pin 06 Der) a la línea azul (-) de la protoboard.
+
+Paso 2: Conectar el Emisor IR (LED transparente):
+- Pon una resistencia de 120Ω (o 220Ω) desde la línea roja (+) hacia una fila libre.
+- En esa fila libre conecta la pata LARGA (+) del LED IR.
+- Conecta la pata CORTA (-) del LED IR directo a la línea azul (-).
+
+Paso 3: Conectar el Receptor IR (Lente negra):
+- Pon una resistencia de 47kΩ (o 100kΩ) desde la línea roja (+) hacia otra fila libre.
+- En esa misma fila libre conecta:
+  a) La pata LARGA del Receptor IR.
+  b) Un cable jumper que vaya al pin P34 (GPIO 34 / Pin 15 Der).
+- Conecta la pata CORTA del Receptor IR directo a la línea azul (-).
+
+Paso 4: Conectar el LED Testigo Visible:
+- Pon una resistencia de 220Ω conectada a la fila del pin P26 (GPIO 26 / Pin 10 Der).
+- El otro extremo de la resistencia llévalo a una fila libre.
+- En esa fila libre conecta la pata LARGA (+) del LED común.
+- Conecta la pata CORTA (-) del LED común directo a la línea azul (-).
+
+--------------------------------------------------------------------------------
+7. RESULTADO EN FUNCIONAMIENTO
+--------------------------------------------------------------------------------
+* Mientras el haz esté despejado: El LED testigo permanece totalmente APAGADO.
+* En el instante exacto en que cortes el haz (con la mano, una hoja, etc.):
+  El LED testigo se ENCENDERÁ durante 250 milisegundos como aviso visual claro.
+================================================================================
