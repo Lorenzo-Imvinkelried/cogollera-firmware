@@ -95,6 +95,7 @@ El proyecto cuenta con ejemplos de prueba independientes y listos para usar:
 6. `06-led-externo-onoff.cpp`: Control de parpadeo de LED externo en protoboard (GPIO 26) con resistencia de protección y diagnóstico sincronizado con el LED interno.
 7. `07-detector-infrarrojo.cpp`: Detector de barrera/obstáculos infrarrojo (LED IR + Fototransistor) usando entrada analógica (GPIO 34) con umbral calibrable y alerta visual por LED.
 8. `08-doble-barrera-cogollera.cpp`: Doble barrera infrarroja (GPIO 34 y GPIO 35) con clasificador de tamaño para detectar capturas de insectos grandes (cogolleras) y descartar bichos pequeños o polvillo.
+9. `09-doble-barrera-supabase.cpp`: Integración total de la doble barrera con arquitectura Dual-Core (FreeRTOS): detección ultrarrápida en Núcleo 1 y transmisión HTTPS asíncrona a Supabase en Núcleo 0 sin bloqueos.
 
 ### 💡 Optimización de Memoria RAM con NimBLE
 El ESP32 utiliza por defecto la librería Bluetooth clásica de Espressif (*Bluedroid*), la cual consume **más de 100 KB de memoria RAM**. Al combinar Bluetooth con peticiones seguras HTTPS a la nube (Supabase), la memoria se agotaba y provocaba el error `(-16) BIGNUM - Memory allocation failed`.
