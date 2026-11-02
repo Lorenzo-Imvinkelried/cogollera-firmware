@@ -19,7 +19,10 @@ Este documento (`README.md`) resume y reemplaza la necesidad de consultar esos a
 | Carpeta / Archivo | ¿Para qué sirve? |
 | :--- | :--- |
 | **`src/`** | Carpeta principal de código fuente. Aquí se encuentra el archivo de entrada [`src/main.cpp`](file:///d:/Usuario/Desktop/cogollera-firmware/src/main.cpp). |
-| **`catedra/`** | Resolución completa de los ejercicios prácticos y teóricos de la cátedra (Blink, Pull-Up/Down, Antirrebote, Cochera con `millis()`, Wokwi). |
+| **`practica-1-esp32/`** | Resolución de la Guía Práctica 1 (UTN ISI): Entradas Analógicas, Steinhart-Hart NTC, PWM, Interrupciones externas, DHT22 y Ultrasonido HC-SR04. |
+| **`practica-2-esp32/`** | Resolución de la Guía Práctica 2 (UTN ISI): Actuadores de Potencia (Relé), Servomotores, Motores Paso a Paso (Driver A4988) y Control PID Discreto (POO y Anti-Windup). |
+| **`tp_pedromo/`** | **Trabajo Práctico Especial de Cátedra (Prof. Perdomo):** Clasificador Automático de Huevos en 3 Carriles con Stepper (A4988), Servomotor, HC-SR04, Relé Ovoscopio, DHT22, PID discreto por PWM y E-Stop por ISR. Incluye `diagram.json` listo para Wokwi. |
+| **`catedra/`** | Resolución de los ejercicios iniciales de la cátedra (Blink, Pull-Up/Down, Antirrebote, Cochera con `millis()`, Wokwi). |
 | **`circuitos/`** | Diagramas esquemáticos y guías paso a paso de conexión en protoboard (`.txt`). |
 | **`ejemplos/`** | Ejemplos independientes y modulares de prueba (LEDs, Wi-Fi, BLE, Supabase, Infrarrojos). |
 | **`include/`** | Para archivos de cabecera C/C++ (`.h`). Sirve para compartir declaraciones de funciones, estructuras o constantes entre varios archivos sin duplicar código. |

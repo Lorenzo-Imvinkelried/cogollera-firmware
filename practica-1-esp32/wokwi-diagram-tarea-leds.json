@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "author": "UTN Santa Fe - Tecnologías para la Automatización (U5 Práctica 1)",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-esp32-devkit-v1",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "pot1",
+      "top": -120,
+      "left": -60,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledVerde",
+      "top": -80,
+      "left": 180,
+      "attrs": { "color": "green", "label": "Verde (>=1365)" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rVerde",
+      "top": -30,
+      "left": 180,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledAmarillo",
+      "top": 30,
+      "left": 180,
+      "attrs": { "color": "yellow", "label": "Amarillo (>=2730)" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rAmarillo",
+      "top": 80,
+      "left": 180,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledRojo",
+      "top": 140,
+      "left": 180,
+      "attrs": { "color": "red", "label": "Rojo (==4095)" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rRojo",
+      "top": 190,
+      "left": 180,
+      "attrs": { "value": "220" }
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+
+    [ "pot1:GND", "esp:GND.1", "black", [ "v0" ] ],
+    [ "pot1:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "pot1:SIG", "esp:D32", "blue", [ "v0" ] ],
+
+    [ "esp:D25", "rVerde:1", "green", [ "v0" ] ],
+    [ "rVerde:2", "ledVerde:A", "green", [ "v0" ] ],
+    [ "ledVerde:C", "esp:GND.2", "black", [ "v0" ] ],
+
+    [ "esp:D26", "rAmarillo:1", "orange", [ "v0" ] ],
+    [ "rAmarillo:2", "ledAmarillo:A", "orange", [ "v0" ] ],
+    [ "ledAmarillo:C", "esp:GND.2", "black", [ "v0" ] ],
+
+    [ "esp:D27", "rRojo:1", "red", [ "v0" ] ],
+    [ "rRojo:2", "ledRojo:A", "red", [ "v0" ] ],
+    [ "ledRojo:C", "esp:GND.2", "black", [ "v0" ] ]
+  ],
+  "dependencies": {}
+}
+

@@ -1,0 +1,121 @@
+================================================================================
+UTN SANTA FE - INGENIERÍA EN SISTEMAS DE INFORMACIÓN
+CÁTEDRA: TECNOLOGÍAS PARA LA AUTOMATIZACIÓN (UNIDAD 5 - SISTEMAS EMBEBIDOS)
+PROFESOR: MARIANO MIGUEL PERDOMO
+--------------------------------------------------------------------------------
+GUÍA DE REFERENCIA: COMPONENTES DEL TP Y PÁGINAS EXACTAS EN LOS PDFs
+================================================================================
+
+Este documento mapea cada componente, sensor y actuador utilizado en el
+"Clasificador Automático de Huevos en 3 Carriles" con la página exacta y diapositiva
+donde fue explicado en las guías oficiales de la cátedra:
+  - GUÍA 1: U5.3. Práctica 1 con ESP32.pdf
+  - GUÍA 2: U5.4. Práctica 2 con ESP32.pdf
+
+================================================================================
+1. COMPONENTES ACTIVOS EN EL TRABAJO PRÁCTICO (MODELO ACTUAL)
+================================================================================
+
+[A] MOTOR PASO A PASO (NEMA 17) Y DRIVER A4988
+--------------------------------------------------------------------------------
+* Rol en el TP: Accionamiento indexado de la Cinta Transportadora (200 pasos/huevo).
+* Pines ESP32:  GPIO 14 (DIR), GPIO 12 (STEP).
+* PDF:          U5.4. Práctica 2 con ESP32.pdf
+* Páginas:      PÁGINAS 21 a 31
+  - Pág. 21-22: Principio del motor paso a paso, geometría bipolar, 1.8°/paso, 200 pasos/vuelta.
+  - Pág. 23-25: Conexión del Driver A4988 (STEP, DIR, RESET, SLEEP, microstepping).
+  - Pág. 26-29: Código base de giros y control de velocidad variando delayMicroseconds().
+  - Pág. 30:    Consigna 2: Control con pulsadores para giros completos.
+  - Pág. 31:    Consigna 3: Control incremental paso a paso (1.8°) y cambio de DIR.
+
+
+[B] SERVOMOTOR ANGULAR (BIBLIOTECA ESP32Servo)
+--------------------------------------------------------------------------------
+* Rol en el TP: Compuerta desviadora de 3 vías (0° Chico | 90° Mediano | 180° Grande).
+* Pin ESP32:    GPIO 33 (PWM a 50 Hz).
+* PDF:          U5.4. Práctica 2 con ESP32.pdf
+* Páginas:      PÁGINAS 11 a 20
+  - Pág. 11-13: Fundamentos del servomotor, modulación por ancho de pulso (T = 20 ms / 50 Hz).
+  - Pág. 14-16: Asignación de temporizadores hardware (ESP32PWM::allocateTimer) y attach().
+  - Pág. 17-18: Código de prueba angular fija (0°, 90°, 180°).
+  - Pág. 19:    Consigna 2: Barrido suave fluido grado a grado (usado en moverServoSuave()).
+  - Pág. 20:    Consigna 3: Control proporcional angular con potenciómetro.
+
+
+[C] SENSOR ULTRASÓNICO DE DISTANCIA HC-SR04
+--------------------------------------------------------------------------------
+* Rol en el TP: Medidor de altura/calibre del huevo (Calibre = 12.0 cm - Distancia).
+* Pines ESP32:  GPIO 5 (TRIG), GPIO 18 (ECHO).
+* PDF:          U5.3. Práctica 1 con ESP32.pdf
+* Páginas:      PÁGINAS 41 a 47
+  - Pág. 41-42: Principio de ecolocalización ultrasónica y tiempo de vuelo (Time-of-Flight).
+  - Pág. 43-44: Cronograma de señales: pulso de disparo de 10 µs en Trigger y lectura en Echo.
+  - Pág. 45:    Fórmula física: Distancia = (tiempo_us * 0.0343 cm/us) / 2.
+  - Pág. 46-47: Implementación de la función específica de medición de distancia con pulseIn().
+
+
+[D] POTENCIÓMETRO Y CONVERSOR ANALÓGICO A DIGITAL (ADC DE 12 BITS)
+--------------------------------------------------------------------------------
+* Rol en el TP: Dial del operador para variar la velocidad de avance de la cinta en tiempo real.
+* Pin ESP32:    GPIO 35 (Canal analógico ADC1_CH7).
+* PDF:          U5.3. Práctica 1 con ESP32.pdf
+* Páginas:      PÁGINAS 4 a 6 y PÁGINA 14
+  - Pág. 4-5:   Qué es el ADC interno del ESP32, resolución de 12 bits (rango 0 a 4095).
+  - Pág. 6:     Lectura analógica con analogRead() y visualización serial.
+  - Pág. 14:    Transformación y escalado de valores analógicos mediante la función map().
+
+
+[E] INTERRUPCIÓN EXTERNA POR HARDWARE (ISR) Y PULSADOR DE EMERGENCIA
+--------------------------------------------------------------------------------
+* Rol en el TP: Parada de Emergencia (E-Stop) instantánea para atascos o seguridad laboral.
+* Pin ESP32:    GPIO 26 (Entrada digital con INPUT_PULLUP, interrupción en FALLING).
+* PDF:          U5.3. Práctica 1 con ESP32.pdf
+* Páginas:      PÁGINAS 28 a 36
+  - Pág. 28-30: Concepto de Interrupción de Hardware (asíncrona) vs. Polling secuencial.
+  - Pág. 31-32: Uso de attachInterrupt(), modos de disparo (FALLING) y macro IRAM_ATTR en RAM.
+  - Pág. 33-36: Manejo de banderas en memoria con calificador volatile en paradas críticas.
+
+
+================================================================================
+2. COMPONENTES EXTRA DESCARTADOS POR SIMPLIFICACIÓN
+   (Para responderle al profesor si pregunta por qué se omitieron)
+================================================================================
+
+[F] RELÉ ELECTROMECÁNICO (AISLAMIENTO GALVÁNICO)
+--------------------------------------------------------------------------------
+* PDF:          U5.4. Práctica 2 con ESP32.pdf
+* Páginas:      PÁGINAS 4 a 10
+* Motivo:       Se diseñó inicialmente para una lámpara ovoscópica de inspección de cáscara,
+                pero se descartó para simplificar el hardware y focalizar el proyecto en la
+                clasificación dimensional por calibre.
+
+[G] CONTROLADOR PID DISCRETO CON ANTI-WINDUP
+--------------------------------------------------------------------------------
+* PDF:          U5.4. Práctica 2 con ESP32.pdf
+* Páginas:      PÁGINAS 32 a 39
+* Motivo:       Controlaba la temperatura de la cámara de empaque; se descartó para eliminar
+                complejidad térmica innecesaria en un sistema electromecánico puro.
+
+[H] SENSOR DE TEMPERATURA NTC (STEINHART-HART)
+--------------------------------------------------------------------------------
+* PDF:          U5.3. Práctica 1 con ESP32.pdf
+* Páginas:      PÁGINAS 7 a 13
+* Motivo:       Medía el calentamiento del driver A4988; omitido por simplificación de cableado.
+
+[I] SENSOR DIGITAL DHT22 (TEMPERATURA Y HUMEDAD)
+--------------------------------------------------------------------------------
+* PDF:          U5.3. Práctica 1 con ESP32.pdf
+* Páginas:      PÁGINAS 37 a 40
+* Motivo:       Supervisaba el clima de conservación; omitido junto con el lazo PID.
+
+[J] SALIDA PWM (PULSE WIDTH MODULATION)
+--------------------------------------------------------------------------------
+* PDF:          U5.3. Práctica 1 con ESP32.pdf
+* Páginas:      PÁGINAS 15 a 27
+* Motivo:       Se utilizaba para modular el ventilador del PID; en el modelo actual el PWM
+                se utiliza internamente dentro de la librería ESP32Servo a 50 Hz.
+
+================================================================================
+FIN DEL DOCUMENTO DE REFERENCIAS - UTN FRSF - ISI
+================================================================================
+

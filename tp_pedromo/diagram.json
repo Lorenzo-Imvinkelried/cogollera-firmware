@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "author": "UTN Santa Fe - ISI - Tecnologias para la Automatizacion (Catedra Perdomo)",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-stepper-motor",
+      "id": "motorCinta",
+      "top": -300,
+      "left": -240,
+      "attrs": {
+        "size": "17",
+        "display": "steps",
+        "arrow": "orange",
+        "label": "1. MOTOR CINTA (Avanza Huevos)"
+      }
+    },
+    {
+      "type": "wokwi-a4988",
+      "id": "driverA4988",
+      "top": -120,
+      "left": -240,
+      "attrs": { "label": "Driver A4988" }
+    },
+    {
+      "type": "wokwi-hc-sr04",
+      "id": "sensorCalibre",
+      "top": -300,
+      "left": 40,
+      "attrs": {
+        "distance": "7",
+        "label": "2. MEDIDOR DE CALIBRE (HC-SR04)"
+      }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servoDesviador",
+      "top": -300,
+      "left": 300,
+      "attrs": { "label": "3. DESVIADOR (0° Chico | 90° Medio | 180° Grande)" }
+    },
+    {
+      "type": "wokwi-esp32-devkit-v1",
+      "id": "esp",
+      "top": 100,
+      "left": 40,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btnEmergencia",
+      "top": 100,
+      "left": -200,
+      "attrs": { "color": "red", "label": "PARADA DE EMERGENCIA" }
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "potVelocidad",
+      "top": 220,
+      "left": -200,
+      "attrs": { "label": "Velocidad de Cinta" }
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+
+    [ "driverA4988:1A", "motorCinta:A+", "red", [ "v0" ] ],
+    [ "driverA4988:1B", "motorCinta:A-", "green", [ "v0" ] ],
+    [ "driverA4988:2A", "motorCinta:B+", "blue", [ "v0" ] ],
+    [ "driverA4988:2B", "motorCinta:B-", "black", [ "v0" ] ],
+
+    [ "driverA4988:RESET", "driverA4988:SLEEP", "orange", [ "v0" ] ],
+    [ "driverA4988:ENABLE", "esp:GND.1", "black", [ "v0" ] ],
+    [ "driverA4988:VDD", "esp:3V3", "red", [ "v0" ] ],
+    [ "driverA4988:VMOT", "esp:VIN", "red", [ "v0" ] ],
+    [ "driverA4988:GND.1", "esp:GND.1", "black", [ "v0" ] ],
+    [ "driverA4988:GND.2", "esp:GND.1", "black", [ "v0" ] ],
+    [ "driverA4988:DIR", "esp:D14", "purple", [ "v0" ] ],
+    [ "driverA4988:STEP", "esp:D12", "cyan", [ "v0" ] ],
+
+    [ "sensorCalibre:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "sensorCalibre:GND", "esp:GND.2", "black", [ "v0" ] ],
+    [ "sensorCalibre:TRIG", "esp:D5", "green", [ "v0" ] ],
+    [ "sensorCalibre:ECHO", "esp:D18", "blue", [ "v0" ] ],
+
+    [ "servoDesviador:PWM", "esp:D33", "yellow", [ "v0" ] ],
+    [ "servoDesviador:V+", "esp:VIN", "red", [ "v0" ] ],
+    [ "servoDesviador:GND", "esp:GND.2", "black", [ "v0" ] ],
+
+    [ "btnEmergencia:1.l", "esp:D26", "red", [ "v0" ] ],
+    [ "btnEmergencia:2.l", "esp:GND.1", "black", [ "v0" ] ],
+
+    [ "potVelocidad:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "potVelocidad:GND", "esp:GND.1", "black", [ "v0" ] ],
+    [ "potVelocidad:SIG", "esp:D35", "green", [ "v0" ] ]
+  ],
+  "dependencies": {}
+}
