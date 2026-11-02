@@ -19,6 +19,7 @@ Este documento (`README.md`) resume y reemplaza la necesidad de consultar esos a
 | Carpeta / Archivo | ¿Para qué sirve? |
 | :--- | :--- |
 | **`src/`** | Carpeta principal de código fuente. Aquí se encuentra el archivo de entrada [`src/main.cpp`](file:///d:/Usuario/Desktop/cogollera-firmware/src/main.cpp). |
+| **`catedra/`** | Resolución completa de los ejercicios prácticos y teóricos de la cátedra (Blink, Pull-Up/Down, Antirrebote, Cochera con `millis()`, Wokwi). |
 | **`circuitos/`** | Diagramas esquemáticos y guías paso a paso de conexión en protoboard (`.txt`). |
 | **`ejemplos/`** | Ejemplos independientes y modulares de prueba (LEDs, Wi-Fi, BLE, Supabase, Infrarrojos). |
 | **`include/`** | Para archivos de cabecera C/C++ (`.h`). Sirve para compartir declaraciones de funciones, estructuras o constantes entre varios archivos sin duplicar código. |
