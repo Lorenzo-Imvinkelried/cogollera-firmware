@@ -1,20 +1,22 @@
 #include <Arduino.h>
 #include <ESP32Servo.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
 
 /*
  * ==============================================================================
  * TRABAJO PRÁCTICO: CLASIFICADOR AUTOMÁTICO DE HUEVOS (3 CARRILES)
- * CON GENERADOR ALEATORIO DE LOTES DE PRODUCCIÓN (VARIEDAD DINÁMICA)
+ * CON PANTALLA LCD 16x2 (I2C) Y CONTROL DE VELOCIDAD POR POTENCIÓMETRO
  * ==============================================================================
- * Cátedra: UTN Santa Fe - Tecnologías para la Automatización (Prof. Perdomo)
+ * Cátedra: UTN Santa Fe - Tecnologías para la Automatización (Vega - Perdomo)
  * Carrera: Ingeniería en Sistemas de Información (ISI)
  *
  * MÁQUINA DE CLASIFICACIÓN FÍSICA (Fila Superior):
  *   [1. Motor Stepper A4988] ===> [2. Ultrasonido HC-SR04] ===> [3. Servomotor Desviador]
  *       (Avanza el Huevo)             (Mide el Calibre)          (0° Chico | 90° Medio | 180° Grande)
  *
- * PANEL DE OPERADOR (Fila Inferior):
- *   [Botón Emergencia] + [Potenciómetro Velocidad] <=========> [ESP32 DevKit]
+ * PANEL DE OPERADOR Y HMI (Fila Inferior):
+ *   [Botón Emergencia] + [Potenciómetro Stepper] <===> [ESP32] <===> [Pantalla LCD 16x2 I2C]
  * ==============================================================================
  */
 
@@ -29,8 +31,11 @@ const int PIN_US_ECHO      = 18; // Recepción del eco ultrasónico
 
 const int PIN_SERVO_PWM    = 33; // Señal PWM de control angular a 50 Hz
 
-const int PIN_POT_VEL      = 35; // Entrada analógica (Potenciómetro de velocidad)
+const int PIN_POT_VEL      = 35; // Entrada analógica (Potenciómetro conectado al motor stepper)
 const int PIN_BTN_ESTOP    = 26; // Interrupción externa (Parada de emergencia)
+
+const int PIN_I2C_SDA      = 21; // Bus I2C Datos para Pantalla LCD
+const int PIN_I2C_SCL      = 22; // Bus I2C Reloj para Pantalla LCD
 
 // ==============================================================================
 // 2. PARÁMETROS MECÁNICOS Y DE CALIBRE
@@ -58,9 +63,10 @@ EstadoSistema estadoActual = ESTADO_AVANZAR_CINTA;
 EstadoSistema estadoPrevio = ESTADO_AVANZAR_CINTA;
 
 // ==============================================================================
-// 4. VARIABLES GLOBALES Y TELEMETRÍA
+// 4. INSTANCIAS DE DISPOSITIVOS Y VARIABLES GLOBALES
 // ==============================================================================
 Servo servoDesviador;
+LiquidCrystal_I2C lcd(0x27, 16, 2); // Dirección I2C 0x27, 16 columnas x 2 filas
 
 // Contadores de Producción
 unsigned long totalHuevos    = 0;
@@ -75,6 +81,7 @@ volatile unsigned long tiempoUltimoISR = 0;
 int anguloObjetivoServo = 90;
 int anguloActualServo   = 0;
 float ultimoCalibreMedido = 0.0;
+int velocidadCintaPorc  = 50;
 
 // ==============================================================================
 // 5. RUTINA DE INTERRUPCIÓN (ISR) - PARADA DE EMERGENCIA
@@ -82,13 +89,49 @@ float ultimoCalibreMedido = 0.0;
 void IRAM_ATTR isrParadaEmergencia() {
     unsigned long ahora = millis();
     if (ahora > 1000 && (ahora - tiempoUltimoISR > 250)) {
-        emergenciaActiva = !emergenciaActiva;
+        emergenciaActiva = !emergenciaActiva; // Conmuta estado de emergencia
         tiempoUltimoISR = ahora;
     }
 }
 
 // ==============================================================================
-// 6. FUNCIONES AUXILIARES DE HARDWARE Y GENERADOR RANDOM
+// 6. FUNCIONES DE ACTUALIZACIÓN DE PANTALLA LCD
+// ==============================================================================
+
+/**
+ * Muestra en la pantalla LCD los contadores de los 3 tipos de huevos y la velocidad del stepper.
+ */
+void actualizarPantallaLCD(const char* estadoTexto = nullptr) {
+    char linea0[17];
+    char linea1[17];
+
+    if (emergenciaActiva) {
+        lcd.setCursor(0, 0);
+        lcd.print("!EMERGENCIA E-STOP");
+        lcd.setCursor(0, 1);
+        lcd.print("CINTA DETENIDA  ");
+        return;
+    }
+
+    if (estadoTexto != nullptr) {
+        // Muestra mensaje temporal de estado
+        snprintf(linea0, sizeof(linea0), "%-16s", estadoTexto);
+    } else {
+        // Línea 0: Total de huevos y velocidad actual del motor stepper fijada por el potenciómetro
+        snprintf(linea0, sizeof(linea0), "TOT:%-4lu V:%3d%%", totalHuevos, velocidadCintaPorc);
+    }
+
+    // Línea 1: Contadores individuales de los 3 tipos de huevos (Chico, Mediano, Grande)
+    snprintf(linea1, sizeof(linea1), "C:%-3lu M:%-3lu G:%-3lu", huevosChicos, huevosMedianos, huevosGrandes);
+
+    lcd.setCursor(0, 0);
+    lcd.print(linea0);
+    lcd.setCursor(0, 1);
+    lcd.print(linea1);
+}
+
+// ==============================================================================
+// 7. FUNCIONES AUXILIARES DE HARDWARE Y GENERADOR RANDOM
 // ==============================================================================
 
 /**
@@ -108,27 +151,19 @@ float medirDistanciaHCSR04() {
 }
 
 /**
- * GENERADOR ALEATORIO DE LLEGADA DE HUEVOS (Variabilidad Dinámica)
- * ----------------------------------------------------------------
- * Si el usuario no movió manualmente el sensor HC-SR04 en Wokwi, esta función
- * simula la llegada aleatoria de huevos de distintos tamaños:
- *   - 33% probabilidad: Huevo Chico   (Calibre entre 2.6 y 3.8 cm) -> Servo a 0°
- *   - 34% probabilidad: Huevo Mediano (Calibre entre 4.2 y 5.3 cm) -> Servo a 90°
- *   - 33% probabilidad: Huevo Grande  (Calibre entre 5.7 y 6.9 cm) -> Servo a 180°
+ * Obtiene el calibre del huevo con variabilidad dinámica continua.
  */
 float obtenerCalibreHuevo() {
-    // 1. Leemos el sensor físico HC-SR04
     float distSensor = medirDistanciaHCSR04();
     float calibreSensor = DISTANCIA_BASE_CINTA_CM - distSensor;
 
-    // Si el usuario movió manualmente el slider del sensor en Wokwi (lejos del default ~7 cm)
-    // respetamos su entrada manual:
+    // Si el usuario movió manualmente el sensor en Wokwi, respetamos su medición
     if (distSensor < 6.0 || distSensor > 8.0) {
         return calibreSensor;
     }
 
-    // 2. Si el sensor está en su valor por defecto, generamos variedad aleatoria continua:
-    int categoriaRandom = random(1, 4); // Elige 1, 2 o 3 al azar
+    // De lo contrario, genera calibres variados al azar para que el servo se mueva dinámicamente
+    int categoriaRandom = random(1, 4);
     float calibreRandom = 0.0;
 
     if (categoriaRandom == 1) {
@@ -143,11 +178,13 @@ float obtenerCalibreHuevo() {
 }
 
 /**
- * Obtiene el tiempo entre pulsos según la posición del potenciómetro.
+ * Lee el potenciómetro conectado al motor stepper y calcula el delay y porcentaje.
  */
 int obtenerRetardoPasoUs() {
     int adcPot = analogRead(PIN_POT_VEL);
-    // Mapea: Pot al mínimo -> 3000 us (lento) | Pot al máximo -> 1000 us (rápido)
+    // Calcula porcentaje de velocidad para mostrar en la pantalla LCD (20% a 100%)
+    velocidadCintaPorc = map(adcPot, 0, 4095, 20, 100);
+    // Mapea a tiempo de microsegundos: Pot al mínimo -> 3000 us (lento) | Pot al máximo -> 1000 us (rápido)
     return map(adcPot, 0, 4095, 3000, 1000);
 }
 
@@ -162,54 +199,49 @@ void moverServoSuave(int anguloDestino) {
         if (emergenciaActiva) break;
         anguloActualServo += paso;
         servoDesviador.write(anguloActualServo);
-        delay(10); // Velocidad ágil de giro del servo
+        delay(10);
     }
     anguloActualServo = anguloDestino;
     servoDesviador.write(anguloActualServo);
 }
 
-/**
- * Imprime el resumen de producción en el Serial Monitor.
- */
-void imprimirReporteProduccion() {
-    Serial.println("---------------------------------------------------------");
-    Serial.printf("  [PRODUCCIÓN TOTAL]: %lu huevos clasificados\n", totalHuevos);
-    Serial.printf("  -> Carril 1 (CHICOS  < 4.0 cm): %lu (%.1f%%)\n",
-                  huevosChicos, totalHuevos ? (huevosChicos * 100.0 / totalHuevos) : 0);
-    Serial.printf("  -> Carril 2 (MEDIOS 4.0-5.5cm): %lu (%.1f%%)\n",
-                  huevosMedianos, totalHuevos ? (huevosMedianos * 100.0 / totalHuevos) : 0);
-    Serial.printf("  -> Carril 3 (GRANDES > 5.5 cm): %lu (%.1f%%)\n",
-                  huevosGrandes, totalHuevos ? (huevosGrandes * 100.0 / totalHuevos) : 0);
-    Serial.println("---------------------------------------------------------\n");
-}
-
 // ==============================================================================
-// 7. SETUP
+// 8. SETUP
 // ==============================================================================
 void setup() {
     Serial.begin(115200);
     delay(400);
 
-    // Inicializamos la semilla del generador aleatorio con ruido térmico del ADC
+    // Semilla aleatoria a partir del ADC flotante
     randomSeed(analogRead(36) + millis());
 
     Serial.println("\n============================================================");
     Serial.println("  UTN SANTA FE - INGENIERÍA EN SISTEMAS DE INFORMACIÓN      ");
-    Serial.println("  TECNOLOGÍAS PARA LA AUTOMATIZACIÓN - CÁTEDRA PERDOMO       ");
-    Serial.println("  TP: CLASIFICADOR AUTOMÁTICO DE HUEVOS (3 CARRILES)        ");
-    Serial.println("  [MODO DINÁMICO]: GENERADOR ALEATORIO DE LOTES ACTIVADO    ");
+    Serial.println("  TECNOLOGÍAS PARA LA AUTOMATIZACIÓN - VEGA / PERDOMO       ");
+    Serial.println("  TP: CLASIFICADOR DE HUEVOS CON PANTALLA LCD 16x2 (I2C)    ");
     Serial.println("============================================================\n");
 
-    // Stepper A4988
+    // Inicialización del Bus I2C y la Pantalla LCD
+    Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
+    lcd.init();
+    lcd.backlight();
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("CLASIFICADOR UTN");
+    lcd.setCursor(0, 1);
+    lcd.print("INICIANDO SIST..");
+    delay(1200);
+
+    // Pines del Stepper A4988
     pinMode(PIN_STEPPER_DIR, OUTPUT);
     pinMode(PIN_STEPPER_STEP, OUTPUT);
-    digitalWrite(PIN_STEPPER_DIR, HIGH); // Sentido de avance hacia el clasificador
+    digitalWrite(PIN_STEPPER_DIR, HIGH); // Sentido horario de avance
 
-    // Sensor Ultrasónico HC-SR04
+    // Pines del Sensor Ultrasónico HC-SR04
     pinMode(PIN_US_TRIG, OUTPUT);
     pinMode(PIN_US_ECHO, INPUT);
 
-    // Parada de Emergencia (Interrupción Externa)
+    // Pulsador de Parada de Emergencia (Interrupción Externa)
     pinMode(PIN_BTN_ESTOP, INPUT_PULLUP);
     delay(50);
     emergenciaActiva = false;
@@ -222,18 +254,18 @@ void setup() {
     ESP32PWM::allocateTimer(3);
     servoDesviador.setPeriodHertz(50);
     servoDesviador.attach(PIN_SERVO_PWM, 500, 2400);
-
-    // Arranca en 0° (Carril Chico) para que el primer movimiento sea visible
-    servoDesviador.write(0);
+    servoDesviador.write(0); // Posición inicial en 0°
     anguloActualServo = 0;
 
-    Serial.println("[OK] Sistema iniciado y listo para clasificar.");
-    Serial.println("[INFO] Los huevos llegarán con calibres variados al azar.");
+    // Actualización inicial de la pantalla LCD
+    actualizarPantallaLCD();
+
+    Serial.println("[OK] Sistema y Pantalla LCD 16x2 iniciados.");
     Serial.println("============================================================\n");
 }
 
 // ==============================================================================
-// 8. LOOP PRINCIPAL (MÁQUINA DE ESTADOS FINITOS)
+// 9. LOOP PRINCIPAL (MÁQUINA DE ESTADOS FINITOS)
 // ==============================================================================
 void loop() {
     // -------------------------------------------------------------------------
@@ -243,14 +275,16 @@ void loop() {
         if (estadoActual != ESTADO_PARADA_EMERGENCIA) {
             estadoPrevio = estadoActual;
             estadoActual = ESTADO_PARADA_EMERGENCIA;
-            Serial.println("\n>>> [ALERTA] ¡PARADA DE EMERGENCIA ACTIVADA POR OPERADOR!");
-            Serial.println(">>> Cinta detenida. Presione nuevamente el botón rojo para reanudar.\n");
+            actualizarPantallaLCD();
+            Serial.println("\n>>> [ALERTA] ¡PARADA DE EMERGENCIA ACTIVADA!");
+            Serial.println(">>> Cinta detenida. Presione el botón rojo para reanudar.\n");
         }
         delay(100);
         return;
     } else if (estadoActual == ESTADO_PARADA_EMERGENCIA) {
-        Serial.println(">>> [SISTEMA] Emergencia liberada. Reanudando cinta transportadora...\n");
+        Serial.println(">>> [SISTEMA] Emergencia liberada. Reanudando...\n");
         estadoActual = estadoPrevio;
+        actualizarPantallaLCD();
     }
 
     // -------------------------------------------------------------------------
@@ -258,10 +292,13 @@ void loop() {
     // -------------------------------------------------------------------------
     switch (estadoActual) {
 
-        // EVENTO 1: AVANCE DE CINTA
+        // EVENTO 1: AVANCE DE CINTA CON CONTROL DE VELOCIDAD POR POTENCIÓMETRO
         case ESTADO_AVANZAR_CINTA: {
             int retardoUs = obtenerRetardoPasoUs();
-            Serial.println("[PASO 1: CINTA] Avanzando 200 pasos hacia el sensor...");
+            actualizarPantallaLCD(); // Muestra velocidad actual y contadores
+
+            Serial.printf("[PASO 1: CINTA] Avanzando motor stepper 200 pasos (Vel: %d%%, delay: %d us)...\n",
+                          velocidadCintaPorc, retardoUs);
 
             for (int i = 0; i < PASOS_POR_POSICION; i++) {
                 if (emergenciaActiva) return;
@@ -276,27 +313,29 @@ void loop() {
             break;
         }
 
-        // EVENTO 2: MEDICIÓN DE CALIBRE (CON RANDOM AUTOMÁTICO)
+        // EVENTO 2: MEDICIÓN DE CALIBRE Y CATEGORIZACIÓN
         case ESTADO_MEDIR_CALIBRE: {
-            // Obtenemos el calibre (aleatorio para variedad dinámica, o manual si se mueve el sensor)
             ultimoCalibreMedido = obtenerCalibreHuevo();
 
-            Serial.printf("[SENSOR HC-SR04] ¡Llegó un huevo! -> CALIBRE (ALTURA): %.1f cm\n", ultimoCalibreMedido);
+            Serial.printf("[SENSOR HC-SR04] ¡Huevo detectado! -> Calibre: %.1f cm\n", ultimoCalibreMedido);
 
-            // Toma de decisión del carril según el calibre medido
+            // Toma de decisión del carril y actualización de contadores
             if (ultimoCalibreMedido < 4.0) {
                 anguloObjetivoServo = ANGULO_CARRIL_CHICO;
                 huevosChicos++;
+                actualizarPantallaLCD("HUEVO CHICO (S) ");
                 Serial.printf("[DECISIÓN] -> HUEVO CHICO (S, %.1f cm)   ===> Carril 1 [Servo a %d°]\n",
                               ultimoCalibreMedido, anguloObjetivoServo);
             } else if (ultimoCalibreMedido <= 5.5) {
                 anguloObjetivoServo = ANGULO_CARRIL_MEDIANO;
                 huevosMedianos++;
+                actualizarPantallaLCD("HUEVO MEDIANO(M)");
                 Serial.printf("[DECISIÓN] -> HUEVO MEDIANO (M, %.1f cm) ===> Carril 2 [Servo a %d°]\n",
                               ultimoCalibreMedido, anguloObjetivoServo);
             } else {
                 anguloObjetivoServo = ANGULO_CARRIL_GRANDE;
                 huevosGrandes++;
+                actualizarPantallaLCD("HUEVO GRANDE (L)");
                 Serial.printf("[DECISIÓN] -> HUEVO GRANDE (L, %.1f cm)  ===> Carril 3 [Servo a %d°]\n",
                               ultimoCalibreMedido, anguloObjetivoServo);
             }
@@ -306,10 +345,9 @@ void loop() {
             break;
         }
 
-        // EVENTO 3: APERTURA DE COMPUERTA / SERVO (MOVIMIENTO VISIBLE)
+        // EVENTO 3: APERTURA DE COMPUERTA / SERVO
         case ESTADO_POSICIONAR_DESVIADOR:
-            Serial.printf("[PASO 2: DESVIADOR] Moviendo servomotor de %d° a %d°...\n",
-                          anguloActualServo, anguloObjetivoServo);
+            Serial.printf("[PASO 2: DESVIADOR] Moviendo servomotor a %d°...\n", anguloObjetivoServo);
             moverServoSuave(anguloObjetivoServo);
             estadoActual = ESTADO_DESCARGA_CARRIL;
             break;
@@ -326,9 +364,9 @@ void loop() {
             }
 
             Serial.println("[LISTO] Huevo encarrilado con éxito.");
-            imprimirReporteProduccion();
+            actualizarPantallaLCD(); // Vuelve a mostrar pantalla de totales
 
-            delay(600); // Pausa visual para ver el servo en su posición
+            delay(600); // Pausa para visualizar posición
             estadoActual = ESTADO_AVANZAR_CINTA;
             break;
 

@@ -41,7 +41,7 @@ class NumberedCanvas(canvas.Canvas):
         
         # Footer
         self.line(1.8 * cm, 1.4 * cm, 19.2 * cm, 1.4 * cm)
-        self.drawString(1.8 * cm, 1.0 * cm, "Prof. Jorge R. Vega — Ayudante: Mariano M. Perdomo | Clasificador de Huevos 3 Carriles")
+        self.drawString(1.8 * cm, 1.0 * cm, "Prof. Jorge R. Vega — Ayudante: Mariano M. Perdomo | Clasificador de Huevos con LCD I2C")
         self.drawRightString(19.2 * cm, 1.0 * cm, f"Página {self._pageNumber} de {page_count}")
         self.restoreState()
 
@@ -62,30 +62,30 @@ def build_pdf(filename):
         'DocTitle',
         parent=styles['Heading1'],
         fontName='Helvetica-Bold',
-        fontSize=15,
-        leading=18,
+        fontSize=14,
+        leading=17,
         textColor=colors.HexColor("#1E3A8A"), # Dark Navy Blue
-        spaceAfter=3
+        spaceAfter=2
     )
 
     subtitle_style = ParagraphStyle(
         'DocSubtitle',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=10,
-        leading=13,
+        fontSize=9.5,
+        leading=12,
         textColor=colors.HexColor("#0D9488"), # Teal
-        spaceAfter=10
+        spaceAfter=8
     )
 
     h1_style = ParagraphStyle(
         'SectionH1',
         parent=styles['Heading2'],
         fontName='Helvetica-Bold',
-        fontSize=11,
-        leading=14,
+        fontSize=10.5,
+        leading=13.5,
         textColor=colors.HexColor("#1E3A8A"),
-        spaceBefore=7,
+        spaceBefore=6,
         spaceAfter=3,
         keepWithNext=True
     )
@@ -94,8 +94,8 @@ def build_pdf(filename):
         'SectionH2',
         parent=styles['Heading3'],
         fontName='Helvetica-Bold',
-        fontSize=9.5,
-        leading=12,
+        fontSize=9,
+        leading=11.5,
         textColor=colors.HexColor("#1F2937"),
         spaceBefore=4,
         spaceAfter=2,
@@ -106,28 +106,22 @@ def build_pdf(filename):
         'DocBody',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=8.5,
-        leading=11.5,
+        fontSize=8.3,
+        leading=11,
         textColor=colors.HexColor("#1F2937"),
         alignment=4, # Justified
-        spaceAfter=4
-    )
-
-    body_bold = ParagraphStyle(
-        'DocBodyBold',
-        parent=body_style,
-        fontName='Helvetica-Bold'
+        spaceAfter=3
     )
 
     bullet_style = ParagraphStyle(
         'DocBullet',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=8.3,
-        leading=11,
+        fontSize=8,
+        leading=10.5,
         textColor=colors.HexColor("#1F2937"),
-        leftIndent=12,
-        firstLineIndent=-8,
+        leftIndent=11,
+        firstLineIndent=-7,
         spaceAfter=2
     )
 
@@ -135,8 +129,8 @@ def build_pdf(filename):
         'MetaText',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=8,
-        leading=10.5,
+        fontSize=7.8,
+        leading=10,
         textColor=colors.HexColor("#374151")
     )
 
@@ -144,7 +138,7 @@ def build_pdf(filename):
 
     # Title & Metadata Card
     story.append(Paragraph("PROYECTO: CLASIFICADOR AUTOMÁTICO DE HUEVOS EN 3 CARRILES", title_style))
-    story.append(Paragraph("Entregable 1 — Propuesta Inicial de Solución con SoC ESP32", subtitle_style))
+    story.append(Paragraph("Entregable 1 — Propuesta Inicial con Pantalla LCD 16x2 y Control de Stepper", subtitle_style))
 
     meta_data = [
         [
@@ -157,7 +151,7 @@ def build_pdf(filename):
         ],
         [
             Paragraph("<b>Fecha Límite:</b> 04/11/2026", meta_table_style),
-            Paragraph("<b>Entorno de Simulación:</b> Wokwi ESP32 (Arquitectura C++ / POO)", meta_table_style)
+            Paragraph("<b>Simulación:</b> Wokwi ESP32 (LCD I2C, A4988, Servo, HC-SR04)", meta_table_style)
         ]
     ]
     t_meta = Table(meta_data, colWidths=[8.5 * cm, 8.9 * cm])
@@ -165,13 +159,13 @@ def build_pdf(filename):
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#F8FAFC")),
         ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor("#E2E8F0")),
         ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#F1F5F9")),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-        ('LEFTPADDING', (0,0), (-1,-1), 6),
-        ('RIGHTPADDING', (0,0), (-1,-1), 6),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ('LEFTPADDING', (0,0), (-1,-1), 5),
+        ('RIGHTPADDING', (0,0), (-1,-1), 5),
     ]))
     story.append(t_meta)
-    story.append(Spacer(1, 6))
+    story.append(Spacer(1, 4))
 
     # 1. Descripción del problema
     story.append(Paragraph("1. Descripción del Problema a Resolver", h1_style))
@@ -179,54 +173,49 @@ def build_pdf(filename):
         "En la industria avícola de la región centro del país (Santa Fe y Entre Ríos), la selección y envasado "
         "de huevos de consumo según su calibre comercial (Chico, Mediano y Grande) constituye una etapa crítica de "
         "la cadena productiva. En establecimientos medianos y pequeños, esta tarea suele ejecutarse de forma "
-        "artesanal o manual mediante balanzas estáticas o simple estimación visual del operario. "
-        "Esta modalidad presenta serias desventajas operativas: <b>baja tasa de procesamiento</b>, "
-        "<b>elevado margen de error humano en la categorización</b>, <b>riesgo permanente de fisuras o roturas "
-        "por manipulación excesiva</b> y una <b>ausencia total de registro digital en tiempo real</b> sobre "
-        "el rendimiento por lote.",
+        "artesanal mediante estimación visual del operario. "
+        "Esta modalidad presenta serias desventajas operativas: <b>baja cadencia de procesamiento</b>, "
+        "<b>errores recurrentes en la categorización de calibres</b>, <b>riesgo de roturas por manipulación excesiva</b> "
+        "y <b>falta de visibilidad directa de las métricas de producción acumuladas</b>.",
         body_style
     ))
     story.append(Paragraph(
-        "<b>Problema no trivial planteado:</b> Se requiere una estación automatizada que coordine en tiempo real "
-        "el transporte indexado y sincronizado de cada unidad, la medición dimensional acústica sin contacto físico "
-        "(para preservar la integridad mecánica de la cáscara), la toma de decisión autónoma mediante lógica "
-        "clasificatoria, el redireccionamiento electromecánico suave a tres carriles de descarga independientes y la "
-        "protección del puesto de trabajo mediante parada de emergencia asíncrona.",
+        "<b>Problema no trivial planteado:</b> Se requiere desarrollar una estación automatizada que coordine en tiempo "
+        "real el transporte indexado de las unidades mediante un motor paso a paso, la regulación interactiva de la velocidad "
+        "de traslación mediante un potenciómetro, la medición acústica de calibre sin contacto (sensor ultrasónico HC-SR04), "
+        "la derivación electromecánica suave a 3 carriles de empaque (servomotor) y la visualización instantánea y continua "
+        "de los contadores totales y por categoría sobre una <b>pantalla industrial LCD 16x2 comunicada por bus I2C</b>, "
+        "integrando además una parada de emergencia asíncrona para seguridad operativa.",
         body_style
     ))
 
     # 2. Justificación
     story.append(Paragraph("2. Justificación: Por qué tiene sentido abordarlo con ESP32", h1_style))
     story.append(Paragraph(
-        "El microcontrolador ESP32 (SoC de Espressif Systems con arquitectura dual-core Xtensa a 240 MHz) resulta "
-        "la plataforma idónea para resolver esta problemática por las siguientes razones técnicas:",
+        "El microcontrolador ESP32 (SoC Xtensa Dual-Core a 240 MHz) resulta la plataforma ideal por sus recursos de hardware:",
         body_style
     ))
     story.append(Paragraph(
-        "• <b>Respuesta temporal determinista y sin jitter:</b> El avance indexado de la cinta transportadora requiere "
-        "un tren de pulsos con tiempos precisos de microsegundos (controlador A4988), mientras que el servomotor de "
-        "desvío opera sobre modulación PWM precisa a 50 Hz. Los temporizadores de hardware del ESP32 garantizan "
-        "ambas modulaciones sin degradar el tiempo de cálculo de la CPU.",
+        "• <b>Control determinista del motor paso a paso:</b> El accionamiento del driver A4988 demanda trenes de pulsos precisos "
+        "en microsegundos. El ESP32 permite regular este retardo sin jitter a partir de la lectura del conversor ADC de 12 bits "
+        "del potenciómetro, reflejando el cambio de velocidad instantáneamente en la pantalla LCD.",
         bullet_style
     ))
     story.append(Paragraph(
-        "• <b>Seguridad industrial en tiempo real (Interrupciones externas en IRAM):</b> Ante un atasco o peligro para "
-        "el operador, la rutina de interrupción (ISR) se ejecuta en nanosegundos directamente desde memoria RAM "
-        "(<code>IRAM_ATTR</code>), inhibiendo instantáneamente los pulsos de potencia independientemente del estado "
-        "secuencial del sistema.",
+        "• <b>Interfaz de comunicación I2C por hardware:</b> La integración de la pantalla LCD 16x2 mediante el bus I2C "
+        "(pines dedicados GPIO 21 SDA y GPIO 22 SCL) permite comandar el display utilizando únicamente dos líneas digitales, "
+        "ahorrando pines GPIO y evitando bloqueos gracias al hardware I2C nativo del ESP32.",
         bullet_style
     ))
     story.append(Paragraph(
-        "• <b>Periféricos de conversión analógica (ADC1):</b> Su conversor ADC de 12 bits permite una resolución de 4096 "
-        "niveles, ofreciendo una regulación analógica suave y precisa para el potenciómetro de velocidad de línea sin "
-        "interferir con las tareas lógicas.",
+        "• <b>Modulación PWM para el servomotor:</b> Los temporizadores por hardware del módulo LEDC generan una señal PWM "
+        "limpia a 50 Hz para el posicionamiento exacto y fluido del brazo desviador tridireccional.",
         bullet_style
     ))
     story.append(Paragraph(
-        "• <b>Potencial de conectividad Industria 4.0:</b> Aunque la propuesta inicial se centra en la lógica de control "
-        "y simulación mecatrónica en Wokwi, el ESP32 cuenta con conectividad Wi-Fi/BLE integrada. Esto habilita una "
-        "extensión natural hacia el reporte de telemetría en tiempo real (Supabase, MQTT o dashboards web de planta) sin "
-        "requerir módulos de red complementarios.",
+        "• <b>Seguridad en tiempo real (Interrupciones externas en IRAM):</b> Ante atascos mecánicos, la parada de emergencia "
+        "se ejecuta mediante una ISR en memoria RAM (<code>IRAM_ATTR</code>), congelando el motor stepper de inmediato y "
+        "emitiendo la alerta en la pantalla LCD sin depender del ciclo secuencial del programa.",
         bullet_style
     ))
 
@@ -250,25 +239,25 @@ def build_pdf(filename):
             Paragraph("<b>Entrada Digital</b>", meta_table_style),
             Paragraph("Pulsador tipo Hongo E-Stop<br/>(Modo INPUT_PULLUP)", meta_table_style),
             Paragraph("GPIO 26<br/>(Interrupción)", meta_table_style),
-            Paragraph("Parada de emergencia por hardware asíncrona ante atascos o riesgos.", meta_table_style)
+            Paragraph("Parada de emergencia por hardware asíncrona; congela el motor y alerta en LCD.", meta_table_style)
         ],
         [
             Paragraph("<b>Salida Digital</b>", meta_table_style),
-            Paragraph("Señales DIR y STEP del Driver A4988<br/>+ Disparo HC-SR04", meta_table_style),
+            Paragraph("Driver A4988 (DIR / STEP)<br/>+ Disparo Sensor HC-SR04", meta_table_style),
             Paragraph("GPIO 14 (DIR)<br/>GPIO 12 (STEP)<br/>GPIO 5 (TRIG)", meta_table_style),
-            Paragraph("Control de dirección y avance de pasos del motor de cinta + tren acústico.", meta_table_style)
+            Paragraph("Control cinemático de pasos de la cinta + emisión del tren de pulsos ultrasónicos.", meta_table_style)
         ],
         [
             Paragraph("<b>Entrada Analógica</b>", meta_table_style),
-            Paragraph("Potenciómetro Lineal 10 kΩ<br/>(Conversor ADC de 12 bits)", meta_table_style),
+            Paragraph("Potenciómetro Lineal 10 kΩ<br/>(ADC de 12 bits: 0 a 4095)", meta_table_style),
             Paragraph("GPIO 35<br/>(ADC1_CH7)", meta_table_style),
-            Paragraph("Regulación en vivo de la velocidad de traslación de la cinta (delay entre pasos).", meta_table_style)
+            Paragraph("Regulación interactiva de la velocidad del stepper (20% a 100%), visible en LCD.", meta_table_style)
         ],
         [
             Paragraph("<b>Salida PWM</b>", meta_table_style),
-            Paragraph("Servomotor de 50 Hz<br/>(Biblioteca ESP32Servo)", meta_table_style),
+            Paragraph("Servomotor angular a 50 Hz<br/>(Biblioteca ESP32Servo)", meta_table_style),
             Paragraph("GPIO 33<br/>(Timer LEDC)", meta_table_style),
-            Paragraph("Control angular proporcional para posicionar la compuerta desviadora tridireccional.", meta_table_style)
+            Paragraph("Posicionamiento suave de compuerta a 0° (Chico), 90° (Mediano) o 180° (Grande).", meta_table_style)
         ],
         [
             Paragraph("<b>Sensor</b>", meta_table_style),
@@ -278,15 +267,15 @@ def build_pdf(filename):
         ],
         [
             Paragraph("<b>Actuador</b>", meta_table_style),
-            Paragraph("Motor Paso a Paso Bipolar (NEMA 17)<br/>+ Servomotor SG90 / MG995", meta_table_style),
+            Paragraph("Motor Paso a Paso (NEMA 17)<br/>+ Servomotor SG90 / MG995", meta_table_style),
             Paragraph("Driver A4988<br/>+ GPIO 33", meta_table_style),
-            Paragraph("Accionamiento cinemático de cinta indexada y desvío mecánico a 3 carriles.", meta_table_style)
+            Paragraph("Accionamiento cinemático de cinta transportadora y derivación mecánica a 3 carriles.", meta_table_style)
         ],
         [
-            Paragraph("<b>Interacción Usuario</b>", meta_table_style),
-            Paragraph("Potenciómetro + Botón E-Stop<br/>+ Telemetría Monitor Serie UART", meta_table_style),
-            Paragraph("GPIO 35 / 26<br/>UART 115200", meta_table_style),
-            Paragraph("Ingreso analógico de consignas + visualización continua de métricas por lote.", meta_table_style)
+            Paragraph("<b>Visualización / HMI</b>", meta_table_style),
+            Paragraph("<b>Pantalla LCD 16x2 (I2C)</b><br/>+ Potenciómetro + E-Stop", meta_table_style),
+            Paragraph("GPIO 21 (SDA)<br/>GPIO 22 (SCL)", meta_table_style),
+            Paragraph("Visualización permanente de: Total procesado, Velocidad del Stepper y contadores S/M/L.", meta_table_style)
         ]
     ]
 
@@ -304,50 +293,42 @@ def build_pdf(filename):
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CBD5E1")),
     ]))
     story.append(t_comp)
-    story.append(Spacer(1, 4))
+    story.append(Spacer(1, 3))
 
     # 3.2 Lógica General y Máquina de Estados
     story.append(Paragraph("3.2 Lógica General del Algoritmo (Máquina de Estados Finitos - FSM)", h2_style))
     story.append(Paragraph(
-        "El software se estructura bajo el paradigma de <b>Máquina de Estados Finitos no bloqueante</b> gobernada "
-        "por marcas de tiempo (<code>millis()</code> y <code>delayMicroseconds()</code> específicos), garantizando "
-        "robustez, modularidad y reactividad ante eventos asíncronos:",
+        "El sistema opera bajo una <b>Máquina de Estados Finitos no bloqueante</b> que sincroniza la cinemática, "
+        "la adquisición sensorial y la actualización en vivo de la pantalla LCD:",
         body_style
     ))
 
     fsm_steps = [
-        "<b>1. Estado AVANZAR_CINTA:</b> El ESP32 genera exactamente 200 pulsos digitales sobre el pin STEP del A4988. "
-        "Esto provoca un avance angular de 360° en el rodillo motriz, desplazando la cinta transportadora la distancia justa "
-        "para posicionar una nueva unidad de huevo bajo la campana del sensor ultrasónico. La cadencia de pulsos es modulada "
-        "dinámicamente según la lectura del potenciómetro.",
+        "<b>1. Estado AVANZAR_CINTA:</b> El ESP32 lee el potenciómetro y calcula la velocidad porcentual y el retardo entre pasos "
+        "(3000 µs a 1000 µs), actualizando la pantalla LCD (<i>TOT: XX  V: XX%</i>). Genera 200 pulsos sobre el pin STEP del A4988 "
+        "para avanzar un casillero y ubicar el huevo bajo el sensor acústico.",
         
-        "<b>2. Estado MEDIR_CALIBRE:</b> El microcontrolador dispara una ráfaga ultrasónica de 10 µs y captura el tiempo de eco "
-        "mediante <code>pulseIn()</code>. Considerando la altura base libre de la cinta (12.0 cm), calcula la cota vertical: "
-        "<i>Calibre = 12.0 cm - Distancia_Medida</i>. Según este valor, clasifica el espécimen: "
-        "<b>Chico / S</b> (< 4.0 cm), <b>Mediano / M</b> (4.0 a 5.5 cm) o <b>Grande / L</b> (> 5.5 cm). "
-        "<i>(Nota: Para la simulación dinámica se incluye un generador pseudo-aleatorio que modela la variabilidad continua del lote)</i>.",
+        "<b>2. Estado MEDIR_CALIBRE:</b> Dispara el sensor HC-SR04 y calcula la altura vertical (<i>Calibre = 12.0 cm - Distancia</i>). "
+        "Categoriza la unidad en <b>Chico / S</b> (< 4.0 cm), <b>Mediano / M</b> (4.0 a 5.5 cm) o <b>Grande / L</b> (> 5.5 cm). "
+        "Muestra temporalmente en la pantalla LCD la categoría detectada (ej: <i>HUEVO MEDIANO(M)</i>) e incrementa el contador respectivo.",
         
-        "<b>3. Estado POSICIONAR_DESVIADOR:</b> El servomotor es comandado mediante un algoritmo de transición suave grado a grado "
-        "para evitar inercia y rebotes mecánicos, orientando la compuerta tridireccional: <b>0° hacia Carril 1</b> (Chicos), "
-        "<b>90° hacia Carril 2</b> (Medianos) o <b>180° hacia Carril 3</b> (Grandes).",
+        "<b>3. Estado POSICIONAR_DESVIADOR:</b> El servomotor ejecuta un barrido suave grado a grado para orientar la compuerta "
+        "hacia el carril correspondiente: <b>0° (Carril 1 - Chicos)</b>, <b>90° (Carril 2 - Medianos)</b> o <b>180° (Carril 3 - Grandes)</b>.",
         
-        "<b>4. Estado DESCARGA_CARRIL:</b> El motor paso a paso ejecuta un empuje corto auxiliar de 80 pasos para asegurar el "
-        "descenso suave del huevo hacia la rampa receptora. Se actualiza la base estadística de producción y el sistema retorna "
-        "al Estado 1 para la siguiente unidad.",
+        "<b>4. Estado DESCARGA_CARRIL:</b> El motor stepper ejecuta un avance de 80 pasos para depositar el huevo en la rampa receptora. "
+        "La pantalla LCD refresca los totales (<i>C: XX  M: XX  G: XX</i>) y el ciclo retorna al Estado 1.",
 
-        "<b>5. Estado PARADA_EMERGENCIA (Supervisión Concurrente):</b> Si el operador acciona el pulsador físico, la ISR "
-        "interrumpe el ciclo en nanosegundos, inhibe los pulsos al driver, congela la posición angular del servo y emite un "
-        "mensaje de bloqueo en consola serie hasta que el pulsador sea restablecido manualmente."
+        "<b>5. Estado PARADA_EMERGENCIA (Asíncrono por ISR):</b> Si se presiona el botón rojo, la interrupción bloquea los pulsos del "
+        "motor de forma inmediata y escribe en la pantalla LCD: <i>!EMERGENCIA E-STOP / CINTA DETENIDA</i> hasta su rearme manual."
     ]
 
     for step in fsm_steps:
         story.append(Paragraph(f"• {step}", bullet_style))
 
-    story.append(Spacer(1, 4))
+    story.append(Spacer(1, 3))
     story.append(Paragraph(
-        "<b>Viabilidad de Validación:</b> La totalidad del circuito, la cinemática del motor paso a paso, el accionamiento "
-        "angular del servo, la respuesta acústica y el tablero de telemetría serie se encuentran actualmente verificados y "
-        "operativos en el entorno de simulación <b>Wokwi</b>, listos para la fase de implementación y pruebas del Entregable 2.",
+        "<b>Estado de Validación:</b> El circuito completo, la lógica de estados, la integración del bus I2C con la pantalla "
+        "LCD 16x2 y el accionamiento cinemático se encuentran 100% implementados y verificados en el simulador <b>Wokwi</b>.",
         body_style
     ))
 
